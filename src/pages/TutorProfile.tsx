@@ -189,7 +189,7 @@ export default function TutorProfile() {
     const fetchTutor = async () => {
       setLoading(true);
       try {
-        const response = await api.get(`/teacher/?user_id=${id}`);
+        const response = await api.get(`/teacher?user_id=${id}`);
         const data = response.data?.data || response.data;
         if (!data || !data.id) {
           setNotFound(true);
