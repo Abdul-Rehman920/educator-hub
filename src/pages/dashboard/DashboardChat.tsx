@@ -16,7 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { OnlineAvatar } from "@/components/chat/OnlineAvatar";
 
-const API = "http://127.0.0.1:8000/api";
+const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 /* ─── Types ─── */
 interface Contact {
