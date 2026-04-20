@@ -26,8 +26,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
-const API = "http://127.0.0.1:8000/api";
-
 type FilterOption = { id: number; name: string };
 
 type Tutor = {
@@ -50,14 +48,6 @@ type Tutor = {
   curriculum: string[];
   demo_class: boolean;
 };
-
-function headers() {
-  const token = localStorage.getItem("auth_token");
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-}
 
 export default function TutorsPage() {
   const { unlockedTutorIds } = useUnlockedTutors();
@@ -95,8 +85,8 @@ export default function TutorsPage() {
     // Standards/Classes
     (async () => {
       try {
-        const res = await fetch(`${API}/teacher/classes`, { headers: headers() });
-        const data = await res.json();
+        const res = await api.get("/teacher/classes");
+        const data = res.data;
         const items = data?.standards || data?.data?.standards || data?.data || [];
         setStandardsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
       } catch { }
@@ -105,8 +95,8 @@ export default function TutorsPage() {
     // Subjects
     (async () => {
       try {
-        const res = await fetch(`${API}/teacher/subjects`, { headers: headers() });
-        const data = await res.json();
+        const res = await api.get("/teacher/subjects");
+        const data = res.data;
         const items = data?.subjects || data?.data?.subjects || data?.data || [];
         setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
       } catch { }
@@ -115,8 +105,8 @@ export default function TutorsPage() {
     // Languages
     (async () => {
       try {
-        const res = await fetch(`${API}/teacher/languages`, { headers: headers() });
-        const data = await res.json();
+        const res = await api.get("/teacher/languages");
+        const data = res.data;
         const items = data?.languages || data?.data?.languages || data?.data || [];
         setLanguagesList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
       } catch { }
@@ -125,8 +115,8 @@ export default function TutorsPage() {
     // Countries
     (async () => {
       try {
-        const res = await fetch(`${API}/get/countries`);
-        const data = await res.json();
+        const res = await api.get("/get/countries");
+        const data = res.data;
         const items = Array.isArray(data) ? data : data?.data || [];
         setCountriesList(items.filter((i: any) => i.is_available === 1));
       } catch { }
@@ -156,8 +146,8 @@ export default function TutorsPage() {
       // Max rate
       if (maxRate[0] < 500) params.append("rate_per_hour", String(maxRate[0]));
 
-      const res = await fetch(`${API}/teacher/listing?${params.toString()}`);
-      const json = await res.json();
+      const res = await api.get(`/teacher/listing?${params.toString()}`);
+      const json = res.data;
 
       const teachersData = json?.data || [];
       const mapped: Tutor[] = teachersData.map((t: any) => ({
