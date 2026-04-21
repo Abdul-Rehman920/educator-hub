@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
 
 /* ─── Helpers ─── */
 function headers() {
