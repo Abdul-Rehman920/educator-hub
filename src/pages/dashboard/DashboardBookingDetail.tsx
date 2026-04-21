@@ -437,39 +437,71 @@ export default function DashboardBookingDetail() {
   }, [id, location.state]);
 
   /* ── Confirm / Reject actions ── */
+  /* ── Confirm / Reject actions ── */
   const handleAction = async (action: "confirm" | "reject") => {
-    if (!booking) return;
+    console.log("[handleAction] Called with action:", action);
+    console.log("[handleAction] Booking:", booking);
+    console.log("[handleAction] API URL:", API);
+
+    if (!booking) {
+      toast({ title: "Error", description: "Booking data not loaded.", variant: "destructive" });
+      return;
+    }
+
+    if (!booking.booking_reference) {
+      toast({ title: "Error", description: "Booking reference missing.", variant: "destructive" });
+      return;
+    }
+
     setActionLoading(true);
 
     const statusCode = action === "confirm" ? 2 : 3;
     const bookingRef = booking.booking_reference;
+    const url = `${API}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`;
+    console.log("[handleAction] Fetching:", url);
 
     try {
-      const res = await fetch(
-        `${API}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`,
-        { headers: headers() }
-      );
-      const data = await res.json();
+      const res = await fetch(url, { headers: headers() });
+      console.log("[handleAction] Status:", res.status);
 
-      if (res.ok && data?.success !== false && !data?.errors) {
+      const text = await res.text();
+      console.log("[handleAction] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+
+      const isSuccess = res.ok && !data?.errors && data?.success !== false;
+
+      if (isSuccess) {
         const newStatus = action === "confirm" ? "confirmed" : "rejected";
         setLocalStatus(newStatus);
+        setBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
         toast({
           title: action === "confirm" ? "Booking Confirmed" : "Booking Rejected",
           description:
             action === "confirm"
-              ? `Session with ${booking.student?.name} has been confirmed.`
-              : `Session with ${booking.student?.name} has been rejected.`,
+              ? `Session with ${booking.student?.name || "student"} has been confirmed.`
+              : `Session with ${booking.student?.name || "student"} has been rejected.`,
           variant: action === "confirm" ? "default" : "destructive",
         });
       } else {
         const errorMsg = data?.errors
           ? Object.values(data.errors).flat().join(", ")
-          : data?.message || `Could not ${action} booking.`;
+          : data?.message || `Could not ${action} booking (HTTP ${res.status}).`;
+        console.error("[handleAction] API error:", errorMsg);
         toast({ title: "Error", description: errorMsg, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: `Could not ${action} booking. Please try again.`, variant: "destructive" });
+    } catch (err: any) {
+      console.error("[handleAction] Exception:", err);
+      toast({
+        title: "Error",
+        description: `Network error: ${err?.message || "Could not reach server"}.`,
+        variant: "destructive",
+      });
     } finally {
       setActionLoading(false);
     }
