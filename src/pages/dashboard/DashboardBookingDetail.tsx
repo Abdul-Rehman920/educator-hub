@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
 
 /* ─── Helpers ─── */
 function headers() {
@@ -437,11 +437,12 @@ export default function DashboardBookingDetail() {
   }, [id, location.state]);
 
   /* ── Confirm / Reject actions ── */
-  /* ── Confirm / Reject actions ── */
-  const handleAction = async (action: "confirm" | "reject") => {
+const handleAction = async (action: "confirm" | "reject") => {
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    
     console.log("[handleAction] Called with action:", action);
     console.log("[handleAction] Booking:", booking);
-    console.log("[handleAction] API URL:", API);
+    console.log("[handleAction] BASE_URL:", BASE_URL);
 
     if (!booking) {
       toast({ title: "Error", description: "Booking data not loaded.", variant: "destructive" });
@@ -457,7 +458,7 @@ export default function DashboardBookingDetail() {
 
     const statusCode = action === "confirm" ? 2 : 3;
     const bookingRef = booking.booking_reference;
-    const url = `${API}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`;
+    const url = `${BASE_URL}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`;
     console.log("[handleAction] Fetching:", url);
 
     try {
