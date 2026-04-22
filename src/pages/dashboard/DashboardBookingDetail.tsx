@@ -346,40 +346,50 @@ export default function DashboardBookingDetail() {
 
     /* ── Check if student has paid ── */
     async function fetchPaymentStatus(bookingRef: string | number) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+      console.log("[fetchPaymentStatus] Checking payment for booking:", bookingRef);
+
       try {
-        const teacherId = getTeacherId();
         const res = await fetch(
-          `${API}/booking/get/plans?booking_reference=${bookingRef}`,
+          `${BASE_URL}/booking/get/plans?booking_reference=${bookingRef}`,
           { headers: headers() }
         );
+        console.log("[fetchPaymentStatus] Plans response status:", res.status);
+
         if (res.ok) {
           const json = await res.json();
-          const planList = Array.isArray(json) ? json : (json?.data?.plans || json?.data || json?.plans || []);
-          if (planList.length > 0) {
-            const allPaid = planList.every((p: any) => p.paid_at || p.is_paid === "YES");
-            setPaymentPaid(allPaid);
-          }
-        }
-      } catch {}
+          console.log("[fetchPaymentStatus] Plans raw JSON:", json);
 
-      // Also try booking/detail for payment info
-      try {
-        const teacherId = getTeacherId();
-        if (teacherId && bookingRef) {
-          const res = await fetch(
-            `${API}/booking/detail?booking_reference=${bookingRef}&teacher_id=${teacherId}&student_id=0`,
-            { headers: headers() }
-          );
-          if (res.ok) {
-            const json = await res.json();
-            if (json?.payments?.paid && Array.isArray(json.payments.paid) && json.payments.paid.length > 0) {
+          const planList = Array.isArray(json)
+            ? json
+            : (json?.data?.plans || json?.data || json?.plans || []);
+          console.log("[fetchPaymentStatus] Plan list:", planList);
+
+          if (planList.length > 0) {
+            const allPaid = planList.every((p: any) =>
+              p.paid_at ||
+              p.is_paid === "YES" ||
+              p.is_paid === "yes" ||
+              p.is_paid === true ||
+              p.is_paid === 1 ||
+              p.status === "paid"
+            );
+            console.log("[fetchPaymentStatus] All paid?", allPaid);
+
+            if (allPaid) {
               setPaymentPaid(true);
+              console.log("[fetchPaymentStatus] Payment status set to PAID");
+              return;
             }
           }
         }
-      } catch {}
-    }
+      } catch (err) {
+        console.error("[fetchPaymentStatus] Plans endpoint error:", err);
+      }
 
+      console.log("[fetchPaymentStatus] Payment not confirmed");
+    }
+    
     /* ── Fetch existing review by tutor ── */
     async function fetchExistingReview(bookingRef: string | number, studentId?: number) {
       const userId = getTeacherId();
