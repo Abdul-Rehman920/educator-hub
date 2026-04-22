@@ -391,58 +391,90 @@ export default function DashboardBookingDetail() {
     }
     
     /* ── Fetch existing review by tutor ── */
-    async function fetchExistingReview(bookingRef: string | number, studentId?: number) {
+    async function fetchExistingReview(bookingRef: string | number, studentId?: number, appointmentDate?: string) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
       const userId = getTeacherId();
+      console.log("[fetchExistingReview] Start - bookingRef:", bookingRef, "studentId:", studentId, "userId:", userId);
+
       if (!userId || !bookingRef) return;
 
       let sid = studentId || 0;
 
-      // If no student_id, try to find it from booking sessions
+      // If no student_id, try to find it from sessions endpoint
       if (!sid) {
-        try {
-          const sRes = await fetch(`${API}/booking/sessions?month=${new Date().getMonth() + 1}`, { headers: headers() });
-          if (sRes.ok) {
-            const sJson = await sRes.json();
-            const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
-            const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
-            if (match?.student?.id) sid = match.student.id;
-          }
-        } catch {}
+        // Try with appointment_date first (most accurate)
+        if (appointmentDate) {
+          try {
+            const sRes = await fetch(`${BASE_URL}/booking/sessions?date=${appointmentDate}`, { headers: headers() });
+            if (sRes.ok) {
+              const sJson = await sRes.json();
+              const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
+              const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
+              if (match?.student?.id) sid = match.student.id;
+            }
+          } catch {}
+        }
+        // Fallback: try by month
+        if (!sid) {
+          try {
+            const sRes = await fetch(`${BASE_URL}/booking/sessions?month=${new Date().getMonth() + 1}`, { headers: headers() });
+            if (sRes.ok) {
+              const sJson = await sRes.json();
+              const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
+              const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
+              if (match?.student?.id) sid = match.student.id;
+            }
+          } catch {}
+        }
       }
 
-      // Call booking/detail with all 3 required params
+      console.log("[fetchExistingReview] Final student_id:", sid);
+      if (!sid) {
+        console.log("[fetchExistingReview] No student_id found, exiting");
+        return;
+      }
+
+      // Call booking/detail with valid student_id
       try {
-        const res = await fetch(
-          `${API}/booking/detail?booking_reference=${bookingRef}&teacher_id=${userId}&student_id=${sid}`,
-          { headers: headers() }
-        );
+        const url = `${BASE_URL}/booking/detail?booking_reference=${bookingRef}&teacher_id=${userId}&student_id=${sid}`;
+        console.log("[fetchExistingReview] Fetching:", url);
+
+        const res = await fetch(url, { headers: headers() });
+        console.log("[fetchExistingReview] Status:", res.status);
+
         if (res.ok) {
           const json = await res.json();
+          console.log("[fetchExistingReview] Response JSON:", json);
 
-          // Collect reviews from all possible paths
           const allReviews: any[] = [];
           if (Array.isArray(json?.reviews)) allReviews.push(...json.reviews);
           if (Array.isArray(json?.teacher?.reviews)) allReviews.push(...json.teacher.reviews);
+          if (Array.isArray(json?.student?.reviews)) allReviews.push(...json.student.reviews);
+          if (Array.isArray(json?.booking_reviews)) allReviews.push(...json.booking_reviews);
+          if (Array.isArray(json?.data?.reviews)) allReviews.push(...json.data.reviews);
 
-          // Find review by this tutor (reviewed_by.id === tutor's userId)
+          console.log("[fetchExistingReview] All reviews:", allReviews);
+
           const myReview = allReviews.find(
             (r: any) =>
-              String(r.reviewed_by?.id) === String(userId) &&
+              String(r.reviewed_by?.id || r.user_id || r.reviewer_id) === String(userId) &&
               String(r.booking_reference) === String(bookingRef)
           );
 
+          console.log("[fetchExistingReview] My review:", myReview);
+
           if (myReview) {
             setExistingReview({
-              rate: myReview.rate || 0,
-              comment: myReview.comment || "",
+              rate: myReview.rate || myReview.rating || 0,
+              comment: myReview.comment || myReview.review || "",
             });
             setReviewSubmitted(true);
-            return;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error("[fetchExistingReview] Error:", err);
+      }
     }
-
     if (id) loadBooking();
   }, [id, location.state]);
 
