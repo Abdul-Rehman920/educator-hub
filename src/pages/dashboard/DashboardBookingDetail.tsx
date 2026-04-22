@@ -303,7 +303,7 @@ export default function DashboardBookingDetail() {
               setBooking(bookingData);
               setLocalStatus(bookingData.status || "pending");
               fetchPaymentStatus(bookingData.booking_reference);
-              fetchExistingReview(bookingData.booking_reference, bookingData.student?.id);
+              fetchExistingReview(bookingData.booking_reference, bookingData.student?.id, bookingData.appointment_date);
               setLoading(false);
               return;
             }
