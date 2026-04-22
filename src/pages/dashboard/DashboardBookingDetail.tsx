@@ -545,14 +545,24 @@ const handleAction = async (action: "confirm" | "reject") => {
 
   /* ── Submit Review ── */
   const handleSubmitReview = async () => {
-    if (!booking) return;
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    console.log("[handleSubmitReview] Called");
+
+    if (!booking) {
+      console.error("[handleSubmitReview] No booking");
+      return;
+    }
     if (reviewRating === 0) {
       toast({ title: "Rating Required", description: "Please select a star rating before submitting.", variant: "destructive" });
       return;
     }
+
     setSubmittingReview(true);
+    const url = `${BASE_URL}/booking/review/store`;
+    console.log("[handleSubmitReview] URL:", url);
+
     try {
-      const res = await fetch(`${API}/booking/review/store`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({
@@ -561,18 +571,37 @@ const handleAction = async (action: "confirm" | "reject") => {
           comment: reviewComment || undefined,
         }),
       });
-      const data = await res.json();
-      if (res.ok && (data?.data || data?.success)) {
+      console.log("[handleSubmitReview] Status:", res.status);
+
+      const text = await res.text();
+      console.log("[handleSubmitReview] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+
+      // Success: HTTP 2xx AND no errors field
+      const isSuccess = res.ok && !data?.errors;
+
+      if (isSuccess) {
         toast({ title: "Review Submitted!", description: "Thank you for your feedback." });
         setReviewSubmitted(true);
         setExistingReview({ rate: reviewRating, comment: reviewComment });
         setLocalStatus("completed");
+        console.log("[handleSubmitReview] Success");
       } else {
-        const errMsg = data?.message || data?.errors?.message || "Failed to submit review.";
+        const errMsg = data?.errors
+          ? Object.values(data.errors).flat().join(", ")
+          : data?.message || `Failed to submit review (HTTP ${res.status}).`;
+        console.error("[handleSubmitReview] Error:", errMsg);
         toast({ title: "Error", description: errMsg, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to submit review.", variant: "destructive" });
+    } catch (err: any) {
+      console.error("[handleSubmitReview] Exception:", err);
+      toast({ title: "Error", description: `Network error: ${err?.message || "Could not submit review"}.`, variant: "destructive" });
     } finally {
       setSubmittingReview(false);
     }
