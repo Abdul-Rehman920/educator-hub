@@ -265,7 +265,7 @@ export default function DashboardBookingDetail() {
 
         // Fetch payment status & existing review
         fetchPaymentStatus(rawBooking.booking_reference);
-        fetchExistingReview(rawBooking.booking_reference, rawBooking.student?.id);
+        fetchExistingReview(rawBooking.booking_reference, rawBooking.student?.id, rawBooking.appointment_date);
 
         setLoading(false);
         return;
