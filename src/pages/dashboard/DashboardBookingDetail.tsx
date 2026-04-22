@@ -552,29 +552,58 @@ const handleAction = async (action: "confirm" | "reject") => {
 
   /* ── Cancel Class ── */
   const handleCancelClass = async () => {
-    if (!booking) return;
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    console.log("[handleCancelClass] Called");
+
+    if (!booking) {
+      console.error("[handleCancelClass] No booking");
+      return;
+    }
+
     const confirmed = window.confirm("Are you sure you want to cancel this class? The student will be notified.");
     if (!confirmed) return;
 
     setCancelLoading(true);
+
     try {
       const sessionId = booking.session_id || booking.id;
-      const res = await fetch(`${API}/booking/cancel/classes?ids[]=${sessionId}`, { headers: headers() });
-      const data = await res.json();
+      const url = `${BASE_URL}/booking/cancel/classes?ids[]=${sessionId}`;
+      console.log("[handleCancelClass] Fetching:", url);
 
-      if (res.ok) {
-        setLocalStatus("cancelled");
-        toast({ title: "Class Cancelled", description: "The class has been cancelled. The student has been notified." });
-      } else {
-        toast({ title: "Error", description: data?.message || "Failed to cancel class.", variant: "destructive" });
+      const res = await fetch(url, { headers: headers() });
+      console.log("[handleCancelClass] Status:", res.status);
+
+      const text = await res.text();
+      console.log("[handleCancelClass] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to cancel class. Please try again.", variant: "destructive" });
+
+      const isSuccess = res.ok && !data?.errors;
+
+      if (isSuccess) {
+        setLocalStatus("cancelled");
+        setBooking((prev: any) => prev ? { ...prev, status: "cancelled" } : prev);
+        toast({ title: "Class Cancelled", description: "The class has been cancelled. The student has been notified." });
+        console.log("[handleCancelClass] Success");
+      } else {
+        const errMsg = data?.errors
+          ? Object.values(data.errors).flat().join(", ")
+          : data?.message || `Failed to cancel class (HTTP ${res.status}).`;
+        console.error("[handleCancelClass] Error:", errMsg);
+        toast({ title: "Error", description: errMsg, variant: "destructive" });
+      }
+    } catch (err: any) {
+      console.error("[handleCancelClass] Exception:", err);
+      toast({ title: "Error", description: `Network error: ${err?.message || "Could not cancel class"}.`, variant: "destructive" });
     } finally {
       setCancelLoading(false);
     }
   };
-
   /* ── Submit Review ── */
   const handleSubmitReview = async () => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
