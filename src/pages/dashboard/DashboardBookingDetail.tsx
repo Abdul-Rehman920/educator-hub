@@ -333,7 +333,7 @@ export default function DashboardBookingDetail() {
               setBooking(found);
               setLocalStatus(found.status || "pending");
               fetchPaymentStatus(found.booking_reference);
-              fetchExistingReview(found.booking_reference, found.student?.id);
+              fetchExistingReview(found.booking_reference, found.student?.id, found.appointment_date);
               setLoading(false);
               return;
             }
