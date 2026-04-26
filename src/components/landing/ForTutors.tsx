@@ -43,7 +43,7 @@ export function ForTutors() {
     const role = user?.role?.[0]?.name;
 
     if (!token) {
-      navigate("/signup?role=tutor");
+      navigate("/login");
     } else if (role === "teacher") {
       navigate("/dashboard");
     } else {
