@@ -85,7 +85,7 @@ export default function TutorsPage() {
     // Standards/Classes
     (async () => {
       try {
-        const res = await api.get("/teacher/classes");
+        const res = await api.get("/get/classes");
         const data = res.data;
         const items = data?.standards || data?.data?.standards || data?.data || [];
         setStandardsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
@@ -95,7 +95,7 @@ export default function TutorsPage() {
     // Subjects
     (async () => {
       try {
-        const res = await api.get("/teacher/subjects");
+        const res = await api.get("/get/subjects");
         const data = res.data;
         const items = data?.subjects || data?.data?.subjects || data?.data || [];
         setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
@@ -105,7 +105,7 @@ export default function TutorsPage() {
     // Languages
     (async () => {
       try {
-        const res = await api.get("/teacher/languages");
+        const res = await api.get("/get/languages");
         const data = res.data;
         const items = data?.languages || data?.data?.languages || data?.data || [];
         setLanguagesList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
