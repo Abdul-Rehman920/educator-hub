@@ -52,6 +52,17 @@ type Tutor = {
 export default function TutorsPage() {
   const { unlockedTutorIds } = useUnlockedTutors();
 
+  // ─── Logged-in user info (for own-profile unblur) ───
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user?.id) setCurrentUserId(user.id);
+    } catch {
+      setCurrentUserId(null);
+    }
+  }, []);
+
   // Filter options from API
   const [standardsList, setStandardsList] = useState<FilterOption[]>([]);
   const [subjectsList, setSubjectsList] = useState<FilterOption[]>([]);
@@ -528,7 +539,10 @@ export default function TutorsPage() {
                   <>
                     <div className="space-y-6">
                       {sortedTutors.map((tutor, index) => {
-                        const isLocked = !unlockedTutorIds.has(tutor.id);
+                        // ─── Lock logic ───
+                        // Locked = NOT unlocked AND NOT own profile
+                        const isOwnProfile = currentUserId !== null && tutor.id === currentUserId;
+                        const isLocked = !unlockedTutorIds.has(tutor.id) && !isOwnProfile;
                         return (
                           <motion.div
                             key={tutor.id}
