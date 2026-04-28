@@ -80,6 +80,26 @@ export default function TutorsPage() {
   // Debounce timer for search
   const [searchTimer, setSearchTimer] = useState<any>(null);
 
+  /* ── Fetch subjects (filtered by standard if provided) ── */
+  const fetchSubjectsForStandard = async (standardId: string | null) => {
+    try {
+      let res;
+      if (standardId && standardId !== "all") {
+        // Use POST endpoint to get subjects for specific standard
+        res = await api.post("/v1/users/subject", { id: standardId });
+      } else {
+        // Default: get all subjects
+        res = await api.get("/get/subjects");
+      }
+      const data = res.data;
+      const items = data?.subjects || data?.data?.subjects || data?.data || [];
+      setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
+    } catch (err) {
+      console.error("Subjects fetch error:", err);
+      setSubjectsList([]);
+    }
+  };
+  
   /* ── Fetch filter options from API ── */
   useEffect(() => {
     // Standards/Classes
@@ -92,15 +112,8 @@ export default function TutorsPage() {
       } catch { }
     })();
 
-    // Subjects
-    (async () => {
-      try {
-        const res = await api.get("/get/subjects");
-        const data = res.data;
-        const items = data?.subjects || data?.data?.subjects || data?.data || [];
-        setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
-      } catch { }
-    })();
+    // Subjects (default — all subjects, will be re-fetched when standard changes)
+    fetchSubjectsForStandard(null);
 
     // Languages
     (async () => {
@@ -183,6 +196,13 @@ export default function TutorsPage() {
     }
   }, [searchQuery, selectedSubject, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
 
+  // When standard changes, refetch subjects for that standard
+  useEffect(() => {
+    fetchSubjectsForStandard(selectedStandard);
+    // Reset selected subject when standard changes (might not exist in new standard)
+    setSelectedSubject("all");
+  }, [selectedStandard]);  
+  
   // Fetch on filter change (reset to page 1)
   useEffect(() => {
     setCurrentPage(1);
