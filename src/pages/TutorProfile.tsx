@@ -126,6 +126,21 @@ export default function TutorProfile() {
   const navigate = useNavigate();
   const { unlockTutor, isTutorUnlocked } = useUnlockedTutors();
 
+  // ─── Logged-in user info (for role-based UI hiding & own-profile detection) ───
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user?.id) setCurrentUserId(user.id);
+      const role = user?.role?.[0]?.name || null;
+      setCurrentUserRole(role);
+    } catch {
+      setCurrentUserId(null);
+      setCurrentUserRole(null);
+    }
+  }, []);
+
   const [tutor, setTutor] = useState<TutorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -206,9 +221,29 @@ export default function TutorProfile() {
     fetchTutor();
   }, [id]);
 
+  // ─── Compute role-based flags ───
+  const isLoggedInTutor = currentUserRole === "teacher";
+  const isOwnProfile = tutor !== null && currentUserId !== null && tutor.id === currentUserId;
+  // Tutor should not see unlock/message/booking on OTHER tutors' profiles.
+  // But they CAN see them disabled on their own profile (we just hide for tutors entirely below).
+  const hideTutorActions = isLoggedInTutor;
+
   // ━━━ Check intro fee status from backend (real unlock check) ━━━
+  // Skip this if user is a tutor (they don't need to unlock anything) OR if it's their own profile
   useEffect(() => {
     if (!tutor) return;
+
+    // If logged-in user is a tutor, no need to check intro fee — they can't pay
+    if (isLoggedInTutor) {
+      setProfileUnlocked(false); // doesn't matter; we hide button anyway
+      return;
+    }
+
+    // If it's the user's own profile, treat it as unlocked for them
+    if (isOwnProfile) {
+      setProfileUnlocked(true);
+      return;
+    }
 
     const checkIntroFee = async () => {
       setIntroFeeLoading(true);
@@ -237,7 +272,7 @@ export default function TutorProfile() {
     };
 
     checkIntroFee();
-  }, [tutor]);
+  }, [tutor, isLoggedInTutor, isOwnProfile]);
 
   // Helper: check if a day is available from schedule
   const isDayInSchedule = useCallback((date: Date) => {
@@ -346,15 +381,16 @@ export default function TutorProfile() {
   }
 
   // Fetch week availability when week changes, session type changes, or tutor loads
+  // Skip entirely if logged-in user is a tutor (booking section hidden)
   useEffect(() => {
-    if (tutor && sessionType) {
+    if (tutor && sessionType && !hideTutorActions) {
       fetchWeekAvailability();
     }
-  }, [tutor, weekStart, sessionType, fetchWeekAvailability]);
+  }, [tutor, weekStart, sessionType, fetchWeekAvailability, hideTutorActions]);
 
   // When a date is selected, fetch FRESH slots from API
   useEffect(() => {
-    if (!selectedDate || !tutor || !sessionType) {
+    if (!selectedDate || !tutor || !sessionType || hideTutorActions) {
       setDaySlots([]);
       return;
     }
@@ -396,7 +432,7 @@ export default function TutorProfile() {
     };
 
     fetchSelectedDateSlots();
-  }, [selectedDate, tutor, sessionType]);
+  }, [selectedDate, tutor, sessionType, hideTutorActions]);
 
   // Check if a date has available slots
   const hasAvailability = (date: Date) => {
@@ -622,7 +658,14 @@ export default function TutorProfile() {
   const avatar = tutor.profile?.profile_img || `https://ui-avatars.com/api/?name=${tutor.name}&background=random`;
   const sessionFee = sessionType === "demo" ? 0 : sessionType === "group" ? groupRate : hourlyRate;
   const sessionTypeLabel = sessionType === "demo" ? "Demo Session" : sessionType === "group" ? "Group Session" : "Private Session";
-  const blurClass = profileUnlocked ? "" : "blur-sm select-none pointer-events-none";
+
+  // ─── Blur logic ───
+  // - If user is a logged-in tutor → blur stays based on profileUnlocked (which is false; they can't unlock)
+  //   UNLESS it's their own profile.
+  // - If own profile → never blur.
+  // - Otherwise standard unlock-based blur.
+  const shouldBlur = !isOwnProfile && !profileUnlocked;
+  const blurClass = shouldBlur ? "blur-sm select-none pointer-events-none" : "";
   const tutorTimezone = tutor.country?.timezone || "Asia/Karachi";
 
   return (
@@ -650,7 +693,7 @@ export default function TutorProfile() {
                       alt={tutorName}
                       className={`w-[90px] h-[90px] lg:w-[120px] lg:h-[120px] rounded-full object-cover object-center ring-4 ring-primary/10 shadow-elevated ${blurClass}`}
                     />
-                    {!profileUnlocked && (
+                    {shouldBlur && (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <Lock className="w-8 h-8 text-muted-foreground/60" />
                       </div>
@@ -660,7 +703,7 @@ export default function TutorProfile() {
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
-                          <h1 className={`text-2xl lg:text-3xl text-foreground ${profileUnlocked ? "font-bold" : "font-normal blur-md select-none pointer-events-none"}`}>{tutorName}</h1>
+                          <h1 className={`text-2xl lg:text-3xl text-foreground ${!shouldBlur ? "font-bold" : "font-normal blur-md select-none pointer-events-none"}`}>{tutorName}</h1>
                           {tutor.is_verified === 1 && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-success/10 text-success text-xs font-semibold">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -698,24 +741,27 @@ export default function TutorProfile() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {!profileUnlocked && !introFeeLoading && (
-                          <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
-                            <Lock className="w-4 h-4 mr-1.5" />
-                            Unlock Profile - {currencySymbol}{introFee}
+                      {/* ─── Action buttons: hidden for logged-in tutors ─── */}
+                      {!hideTutorActions && (
+                        <div className="flex items-center gap-3 shrink-0">
+                          {!profileUnlocked && !introFeeLoading && !isOwnProfile && (
+                            <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
+                              <Lock className="w-4 h-4 mr-1.5" />
+                              Unlock Profile - {currencySymbol}{introFee}
+                            </Button>
+                          )}
+                          {introFeeLoading && !isOwnProfile && (
+                            <Button disabled className="bg-primary/50 text-primary-foreground" size="lg">
+                              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                              Checking...
+                            </Button>
+                          )}
+                          <Button onClick={() => navigate(`/student/messages?tutor=${tutor.id}`)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
+                            <MessageSquare className="w-4 h-4 mr-1.5" />
+                            Message Tutor
                           </Button>
-                        )}
-                        {introFeeLoading && (
-                          <Button disabled className="bg-primary/50 text-primary-foreground" size="lg">
-                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                            Checking...
-                          </Button>
-                        )}
-                        <Button onClick={() => navigate(`/student/messages?tutor=${tutor.id}`)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
-                          <MessageSquare className="w-4 h-4 mr-1.5" />
-                          Message Tutor
-                        </Button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -727,9 +773,10 @@ export default function TutorProfile() {
         {/* Content Grid */}
         <section className="pb-16 lg:pb-24">
           <div className="section-container">
-            <div className="grid lg:grid-cols-3 gap-8">
+            {/* When tutor actions are hidden, show content full-width (no booking column) */}
+            <div className={hideTutorActions ? "grid grid-cols-1 gap-8" : "grid lg:grid-cols-3 gap-8"}>
               {/* Left Column */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className={hideTutorActions ? "space-y-8" : "lg:col-span-2 space-y-8"}>
                 {/* About */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card rounded-2xl border border-border p-6 lg:p-8">
                   <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
@@ -784,158 +831,160 @@ export default function TutorProfile() {
                 )}
               </div>
 
-              {/* Right Column – Booking Calendar */}
-              <div className="lg:col-span-1">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className={`bg-card rounded-2xl border border-border p-6 lg:sticky lg:top-24 relative ${!profileUnlocked ? "overflow-hidden" : ""}`}>
-                  {!profileUnlocked && (
-                    <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center gap-3">
-                      <Lock className="w-10 h-10 text-muted-foreground/50" />
-                      <p className="text-sm font-medium text-muted-foreground text-center px-4">Unlock this profile to book sessions</p>
-                      <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                        <Lock className="w-4 h-4 mr-1.5" />
-                        Unlock - {currencySymbol}{introFee}
-                      </Button>
-                    </div>
-                  )}
-                  <h2 className="text-xl font-bold text-foreground mb-2 flex items-center gap-2">
-                    <CalendarIcon className="w-5 h-5 text-primary" />
-                    Book a Session
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-1">Select a day and time slot to book</p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Tutor's timezone: {getTimezoneAbbr(tutorTimezone)} ({tutorTimezone})
-                  </p>
-
-                  {/* Session Type */}
-                  <div className="mb-5">
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Session Type <span className="text-destructive">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {tutor.profile?.demo_class === 1 && (
-                        <button
-                          onClick={() => { if (!demoLimitReached) { setSessionType("demo"); setSessionTypeError(false); setSelectedDate(null); } }}
-                          disabled={demoLimitReached}
-                          className={`p-3 rounded-xl border-2 text-left transition-all sm:col-span-2 ${demoLimitReached ? "border-border opacity-50 cursor-not-allowed" : sessionType === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                        >
-                          <p className={`font-semibold text-sm flex items-center gap-1.5 ${sessionType === "demo" ? "text-primary-foreground" : "text-foreground"}`}>🎁 Demo Session</p>
-                          <p className={`text-sm font-bold ${sessionType === "demo" ? "text-primary-foreground" : "text-primary"}`}>FREE</p>
-                          <p className={`text-xs mt-1 ${sessionType === "demo" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{demosRemaining}/{DEMO_LIMIT} demos remaining</p>
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { setSessionType("private"); setSessionTypeError(false); setSelectedDate(null); }}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "private" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                      >
-                        <p className={`font-semibold text-sm ${sessionType === "private" ? "text-primary-foreground" : "text-foreground"}`}>Private Session</p>
-                        <p className={`text-sm font-bold ${sessionType === "private" ? "text-primary-foreground" : "text-primary"}`}>${hourlyRate}/hour</p>
-                      </button>
-                      <button
-                        onClick={() => { setSessionType("group"); setSessionTypeError(false); setSelectedDate(null); }}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "group" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                      >
-                        <p className={`font-semibold text-sm ${sessionType === "group" ? "text-primary-foreground" : "text-foreground"}`}>Group Session</p>
-                        <p className={`text-sm font-bold ${sessionType === "group" ? "text-primary-foreground" : "text-primary"}`}>${groupRate}/hour</p>
-                      </button>
-                    </div>
-                    {sessionTypeError && <p className="text-destructive text-xs mt-2">Please select a session type before booking</p>}
-                  </div>
-
-                  {/* Prompt to select session type first */}
-                  {!sessionType && (
-                    <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
-                      <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                      Please select a session type above to view available slots
-                    </div>
-                  )}
-
-                  {/* Calendar only shows after session type is selected */}
-                  {sessionType && (
-                    <>
-                      {/* Week Calendar */}
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(subWeeks(weekStart, 1)); setSelectedDate(null); }}>← Prev</Button>
-                          <span className="text-sm font-semibold text-foreground">{format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}</span>
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(addWeeks(weekStart, 1)); setSelectedDate(null); }}>Next →</Button>
-                        </div>
-
-                        {weekLoading && (
-                          <div className="flex items-center justify-center py-2 mb-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-primary mr-2" />
-                            <span className="text-xs text-muted-foreground">Loading availability...</span>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-7 gap-2">
-                          {Array.from({ length: 7 }).map((_, i) => {
-                            const d = addDays(weekStart, i);
-                            const today = startOfDay(new Date());
-                            const isPast = isBefore(d, today);
-                            const isSelected = selectedDate && isSameDay(d, selectedDate);
-                            const available = hasAvailability(d);
-                            const isToday = isSameDay(d, today);
-                            return (
-                              <button
-                                key={i}
-                                disabled={isPast || !available || weekLoading}
-                                onClick={() => setSelectedDate(d)}
-                                className={`flex flex-col items-center justify-center py-3 rounded-lg text-sm transition-all ${isSelected ? "bg-primary text-primary-foreground font-semibold shadow-soft" : isToday && available ? "bg-accent/20 text-foreground font-medium cursor-pointer" : isPast || !available ? "text-muted-foreground/30 cursor-not-allowed" : "hover:bg-muted text-foreground cursor-pointer"}`}
-                              >
-                                <span className="text-xs font-medium mb-1">{format(d, "EEE")}</span>
-                                <span className="text-base">{format(d, "d")}</span>
-                                {available && !isPast && <span className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? "bg-primary-foreground" : "bg-success"}`} />}
-                              </button>
-                            );
-                          })}
-                        </div>
+              {/* Right Column – Booking Calendar (HIDDEN for logged-in tutors) */}
+              {!hideTutorActions && (
+                <div className="lg:col-span-1">
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className={`bg-card rounded-2xl border border-border p-6 lg:sticky lg:top-24 relative ${shouldBlur ? "overflow-hidden" : ""}`}>
+                    {shouldBlur && (
+                      <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center gap-3">
+                        <Lock className="w-10 h-10 text-muted-foreground/50" />
+                        <p className="text-sm font-medium text-muted-foreground text-center px-4">Unlock this profile to book sessions</p>
+                        <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                          <Lock className="w-4 h-4 mr-1.5" />
+                          Unlock - {currencySymbol}{introFee}
+                        </Button>
                       </div>
+                    )}
+                    <h2 className="text-xl font-bold text-foreground mb-2 flex items-center gap-2">
+                      <CalendarIcon className="w-5 h-5 text-primary" />
+                      Book a Session
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-1">Select a day and time slot to book</p>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Tutor's timezone: {getTimezoneAbbr(tutorTimezone)} ({tutorTimezone})
+                    </p>
 
-                      {/* Time Slots */}
-                      {selectedDate ? (
-                        daySlots.length > 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-sm font-medium text-foreground">
-                              Available on {format(selectedDate, "EEEE, MMM d")}
-                            </p>
-                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                              {daySlots.map((slot, i) => (
+                    {/* Session Type */}
+                    <div className="mb-5">
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Session Type <span className="text-destructive">*</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {tutor.profile?.demo_class === 1 && (
+                          <button
+                            onClick={() => { if (!demoLimitReached) { setSessionType("demo"); setSessionTypeError(false); setSelectedDate(null); } }}
+                            disabled={demoLimitReached}
+                            className={`p-3 rounded-xl border-2 text-left transition-all sm:col-span-2 ${demoLimitReached ? "border-border opacity-50 cursor-not-allowed" : sessionType === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
+                          >
+                            <p className={`font-semibold text-sm flex items-center gap-1.5 ${sessionType === "demo" ? "text-primary-foreground" : "text-foreground"}`}>🎁 Demo Session</p>
+                            <p className={`text-sm font-bold ${sessionType === "demo" ? "text-primary-foreground" : "text-primary"}`}>FREE</p>
+                            <p className={`text-xs mt-1 ${sessionType === "demo" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{demosRemaining}/{DEMO_LIMIT} demos remaining</p>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setSessionType("private"); setSessionTypeError(false); setSelectedDate(null); }}
+                          className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "private" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
+                        >
+                          <p className={`font-semibold text-sm ${sessionType === "private" ? "text-primary-foreground" : "text-foreground"}`}>Private Session</p>
+                          <p className={`text-sm font-bold ${sessionType === "private" ? "text-primary-foreground" : "text-primary"}`}>${hourlyRate}/hour</p>
+                        </button>
+                        <button
+                          onClick={() => { setSessionType("group"); setSessionTypeError(false); setSelectedDate(null); }}
+                          className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "group" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
+                        >
+                          <p className={`font-semibold text-sm ${sessionType === "group" ? "text-primary-foreground" : "text-foreground"}`}>Group Session</p>
+                          <p className={`text-sm font-bold ${sessionType === "group" ? "text-primary-foreground" : "text-primary"}`}>${groupRate}/hour</p>
+                        </button>
+                      </div>
+                      {sessionTypeError && <p className="text-destructive text-xs mt-2">Please select a session type before booking</p>}
+                    </div>
+
+                    {/* Prompt to select session type first */}
+                    {!sessionType && (
+                      <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                        <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                        Please select a session type above to view available slots
+                      </div>
+                    )}
+
+                    {/* Calendar only shows after session type is selected */}
+                    {sessionType && (
+                      <>
+                        {/* Week Calendar */}
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(subWeeks(weekStart, 1)); setSelectedDate(null); }}>← Prev</Button>
+                            <span className="text-sm font-semibold text-foreground">{format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}</span>
+                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(addWeeks(weekStart, 1)); setSelectedDate(null); }}>Next →</Button>
+                          </div>
+
+                          {weekLoading && (
+                            <div className="flex items-center justify-center py-2 mb-2">
+                              <Loader2 className="w-4 h-4 animate-spin text-primary mr-2" />
+                              <span className="text-xs text-muted-foreground">Loading availability...</span>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-7 gap-2">
+                            {Array.from({ length: 7 }).map((_, i) => {
+                              const d = addDays(weekStart, i);
+                              const today = startOfDay(new Date());
+                              const isPast = isBefore(d, today);
+                              const isSelected = selectedDate && isSameDay(d, selectedDate);
+                              const available = hasAvailability(d);
+                              const isToday = isSameDay(d, today);
+                              return (
                                 <button
                                   key={i}
-                                  onClick={() => handleBookSlot(selectedDate, slot)}
-                                  className="w-full flex items-center justify-between p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                                  disabled={isPast || !available || weekLoading}
+                                  onClick={() => setSelectedDate(d)}
+                                  className={`flex flex-col items-center justify-center py-3 rounded-lg text-sm transition-all ${isSelected ? "bg-primary text-primary-foreground font-semibold shadow-soft" : isToday && available ? "bg-accent/20 text-foreground font-medium cursor-pointer" : isPast || !available ? "text-muted-foreground/30 cursor-not-allowed" : "hover:bg-muted text-foreground cursor-pointer"}`}
                                 >
-                                  <div className="text-left">
-                                    <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
-                                      {slot.label}
-                                    </p>
-                                  </div>
-                                  <Video className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                  <span className="text-xs font-medium mb-1">{format(d, "EEE")}</span>
+                                  <span className="text-base">{format(d, "d")}</span>
+                                  {available && !isPast && <span className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? "bg-primary-foreground" : "bg-success"}`} />}
                                 </button>
-                              ))}
-                            </div>
+                              );
+                            })}
                           </div>
-                        ) : (
-                          <p className="text-center text-sm text-muted-foreground py-4">
-                            {slotsLoading ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Loading slots...
-                              </span>
-                            ) : (
-                              "No slots available for this day."
-                            )}
-                          </p>
-                        )
-                      ) : (
-                        <div className="text-center py-6 text-muted-foreground text-sm">
-                          Select a date to view available time slots
                         </div>
-                      )}
-                    </>
-                  )}
-                </motion.div>
-              </div>
+
+                        {/* Time Slots */}
+                        {selectedDate ? (
+                          daySlots.length > 0 ? (
+                            <div className="space-y-3">
+                              <p className="text-sm font-medium text-foreground">
+                                Available on {format(selectedDate, "EEEE, MMM d")}
+                              </p>
+                              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                {daySlots.map((slot, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => handleBookSlot(selectedDate, slot)}
+                                    className="w-full flex items-center justify-between p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                                  >
+                                    <div className="text-left">
+                                      <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
+                                        {slot.label}
+                                      </p>
+                                    </div>
+                                    <Video className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">
+                              {slotsLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Loading slots...
+                                </span>
+                              ) : (
+                                "No slots available for this day."
+                              )}
+                            </p>
+                          )
+                        ) : (
+                          <div className="text-center py-6 text-muted-foreground text-sm">
+                            Select a date to view available time slots
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </motion.div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -943,149 +992,153 @@ export default function TutorProfile() {
 
       <Footer />
 
-      {/* Booking Confirmation Modal */}
-      <Dialog open={showConfirmation} onOpenChange={(open) => !open && resetBooking()}>
-        <DialogContent className="sm:max-w-md">
-          {!bookingConfirmed ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Confirm Your Booking</DialogTitle>
-                <DialogDescription>Review the details below and confirm your session.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="flex items-center gap-4">
-                  <img src={avatar} alt={tutorName} className="w-14 h-14 rounded-xl object-cover" />
-                  <div>
-                    <p className="font-semibold text-foreground">{tutorName}</p>
-                    <p className="text-sm text-primary">{tutor.subjects?.map((s) => s.name).join(" & ")}</p>
+      {/* Booking Confirmation Modal — only renders for non-tutors */}
+      {!hideTutorActions && (
+        <Dialog open={showConfirmation} onOpenChange={(open) => !open && resetBooking()}>
+          <DialogContent className="sm:max-w-md">
+            {!bookingConfirmed ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Confirm Your Booking</DialogTitle>
+                  <DialogDescription>Review the details below and confirm your session.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center gap-4">
+                    <img src={avatar} alt={tutorName} className="w-14 h-14 rounded-xl object-cover" />
+                    <div>
+                      <p className="font-semibold text-foreground">{tutorName}</p>
+                      <p className="text-sm text-primary">{tutor.subjects?.map((s) => s.name).join(" & ")}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-muted rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Session Type</span>
-                    <span className="font-medium text-foreground">{sessionTypeLabel}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Date</span>
-                    <span className="font-medium text-foreground">{selectedDate && format(selectedDate, "EEEE, MMMM d, yyyy")}</span>
-                  </div>
-                  {selectedSlot && (
+                  <div className="bg-muted rounded-xl p-4 space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Time</span>
-                      <span className="font-medium text-foreground">{selectedSlot.label}</span>
+                      <span className="text-muted-foreground">Session Type</span>
+                      <span className="font-medium text-foreground">{sessionTypeLabel}</span>
                     </div>
-                  )}
-                  <div className="border-t border-border pt-3 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Session Fee</span>
-                    <span className="font-bold text-foreground text-lg">{sessionType === "demo" ? "FREE" : `$${sessionFee}`}</span>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Date</span>
+                      <span className="font-medium text-foreground">{selectedDate && format(selectedDate, "EEEE, MMMM d, yyyy")}</span>
+                    </div>
+                    {selectedSlot && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Time</span>
+                        <span className="font-medium text-foreground">{selectedSlot.label}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-border pt-3 flex justify-between text-sm">
+                      <span className="text-muted-foreground">Session Fee</span>
+                      <span className="font-bold text-foreground text-lg">{sessionType === "demo" ? "FREE" : `$${sessionFee}`}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={resetBooking} disabled={bookingLoading}>Cancel</Button>
-                <Button onClick={confirmBooking} disabled={bookingLoading}>
-                  {bookingLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Booking...
-                    </span>
-                  ) : (
-                    "Confirm Booking"
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 className="w-8 h-8 text-success" />
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Booking Confirmed!</h3>
-              <p className="text-muted-foreground mb-1">Your session with {tutorName} is scheduled for</p>
-              {selectedDate && selectedSlot && (
-                <p className="font-semibold text-foreground">
-                  {format(selectedDate, "EEEE, MMMM d")} at {selectedSlot.label}
-                </p>
-              )}
-              <Button className="mt-6" onClick={resetBooking}>Done</Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ━━━ REAL Stripe Payment Modal ━━━ */}
-      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); } }}>
-        <DialogContent className="sm:max-w-md">
-          {paymentSuccess ? (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 className="w-8 h-8 text-success" />
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Profile Unlocked!</h3>
-              <p className="text-muted-foreground">You now have full access to this tutor's profile and booking calendar.</p>
-            </div>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  Unlock Profile
-                </DialogTitle>
-                <DialogDescription>
-                  Pay a one-time fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to unlock {tutorName}'s full profile and booking calendar.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                  <p className="text-sm text-muted-foreground">Amount to pay</p>
-                  <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={resetBooking} disabled={bookingLoading}>Cancel</Button>
+                  <Button onClick={confirmBooking} disabled={bookingLoading}>
+                    {bookingLoading ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Booking...
+                      </span>
+                    ) : (
+                      "Confirm Booking"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-success" />
                 </div>
-
-                {/* Stripe Test Mode Indicator */}
-                {stripeKey && stripeKey.startsWith("pk_test") && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                    <p className="text-xs font-medium text-amber-700">🧪 Stripe Test Mode — No real charges</p>
-                    <p className="text-xs text-amber-600 mt-1">Use card: 4242 4242 4242 4242, any future date, any CVC</p>
-                  </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">Booking Confirmed!</h3>
+                <p className="text-muted-foreground mb-1">Your session with {tutorName} is scheduled for</p>
+                {selectedDate && selectedSlot && (
+                  <p className="font-semibold text-foreground">
+                    {format(selectedDate, "EEEE, MMMM d")} at {selectedSlot.label}
+                  </p>
                 )}
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Name on Card</label>
-                    <Input placeholder="John Doe" value={cardName} onChange={(e) => setCardName(e.target.value)} disabled={paymentProcessing} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Card Number</label>
-                    <Input placeholder="4242 4242 4242 4242" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim())} maxLength={19} disabled={paymentProcessing} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Expiry MM/YY</label>
-                      <Input placeholder="12/28" value={cardExpiry} onChange={(e) => { let v = e.target.value.replace(/\D/g, "").slice(0, 4); if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2); setCardExpiry(v); }} maxLength={5} disabled={paymentProcessing} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">CVC</label>
-                      <Input placeholder="123" value={cardCvc} onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} disabled={paymentProcessing} />
-                    </div>
-                  </div>
-                </div>
-                {paymentError && <p className="text-destructive text-sm font-medium">{paymentError}</p>}
+                <Button className="mt-6" onClick={resetBooking}>Done</Button>
               </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); }} disabled={paymentProcessing}>Cancel</Button>
-                <Button onClick={handlePayment} disabled={paymentProcessing} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  {paymentProcessing ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                      Processing Payment...
-                    </span>
-                  ) : `Pay ${currencySymbol}${introFee}`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ━━━ REAL Stripe Payment Modal — only for non-tutors ━━━ */}
+      {!hideTutorActions && (
+        <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); } }}>
+          <DialogContent className="sm:max-w-md">
+            {paymentSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-success" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">Profile Unlocked!</h3>
+                <p className="text-muted-foreground">You now have full access to this tutor's profile and booking calendar.</p>
+              </div>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    Unlock Profile
+                  </DialogTitle>
+                  <DialogDescription>
+                    Pay a one-time fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to unlock {tutorName}'s full profile and booking calendar.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                    <p className="text-sm text-muted-foreground">Amount to pay</p>
+                    <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
+                  </div>
+
+                  {/* Stripe Test Mode Indicator */}
+                  {stripeKey && stripeKey.startsWith("pk_test") && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                      <p className="text-xs font-medium text-amber-700">🧪 Stripe Test Mode — No real charges</p>
+                      <p className="text-xs text-amber-600 mt-1">Use card: 4242 4242 4242 4242, any future date, any CVC</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Name on Card</label>
+                      <Input placeholder="John Doe" value={cardName} onChange={(e) => setCardName(e.target.value)} disabled={paymentProcessing} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Card Number</label>
+                      <Input placeholder="4242 4242 4242 4242" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim())} maxLength={19} disabled={paymentProcessing} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">Expiry MM/YY</label>
+                        <Input placeholder="12/28" value={cardExpiry} onChange={(e) => { let v = e.target.value.replace(/\D/g, "").slice(0, 4); if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2); setCardExpiry(v); }} maxLength={5} disabled={paymentProcessing} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">CVC</label>
+                        <Input placeholder="123" value={cardCvc} onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} disabled={paymentProcessing} />
+                      </div>
+                    </div>
+                  </div>
+                  {paymentError && <p className="text-destructive text-sm font-medium">{paymentError}</p>}
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); }} disabled={paymentProcessing}>Cancel</Button>
+                  <Button onClick={handlePayment} disabled={paymentProcessing} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    {paymentProcessing ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                        Processing Payment...
+                      </span>
+                    ) : `Pay ${currencySymbol}${introFee}`}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
