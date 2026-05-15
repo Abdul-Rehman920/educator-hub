@@ -26,8 +26,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
-const API = "http://127.0.0.1:8000/api";
-
 type FilterOption = { id: number; name: string };
 
 type Tutor = {
@@ -51,16 +49,19 @@ type Tutor = {
   demo_class: boolean;
 };
 
-function headers() {
-  const token = localStorage.getItem("auth_token");
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 export default function TutorsPage() {
   const { unlockedTutorIds } = useUnlockedTutors();
+
+  // ─── Logged-in user info (for own-profile unblur) ───
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user?.id) setCurrentUserId(user.id);
+    } catch {
+      setCurrentUserId(null);
+    }
+  }, []);
 
   // Filter options from API
   const [standardsList, setStandardsList] = useState<FilterOption[]>([]);
@@ -71,7 +72,8 @@ export default function TutorsPage() {
   // Filter values (store IDs for API, "" means "All")
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStandard, setSelectedStandard] = useState("all");
-  const [selectedSubject, setSelectedSubject] = useState("all");
+  // ✨ CHANGED: Subject is now multi-select (array of IDs)
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedCountry, setSelectedCountry] = useState("all");
   const [tuitionType, setTuitionType] = useState("all"); // all, single, group
@@ -90,33 +92,46 @@ export default function TutorsPage() {
   // Debounce timer for search
   const [searchTimer, setSearchTimer] = useState<any>(null);
 
+  /* ── Fetch subjects (filtered by standard if provided) ── */
+  const fetchSubjectsForStandard = async (standardId: string | null) => {
+    try {
+      let res;
+      if (standardId && standardId !== "all") {
+        // Use POST endpoint to get subjects for specific standard
+        res = await api.post("/v1/users/subject", { id: standardId });
+      } else {
+        // Default: get all subjects
+        res = await api.get("/get/subjects");
+      }
+      const data = res.data;
+      const items = data?.subjects || data?.data?.subjects || data?.data || [];
+      setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
+    } catch (err) {
+      console.error("Subjects fetch error:", err);
+      setSubjectsList([]);
+    }
+  };
+  
   /* ── Fetch filter options from API ── */
   useEffect(() => {
     // Standards/Classes
     (async () => {
       try {
-        const res = await fetch(`${API}/teacher/classes`, { headers: headers() });
-        const data = await res.json();
+        const res = await api.get("/get/classes");
+        const data = res.data;
         const items = data?.standards || data?.data?.standards || data?.data || [];
         setStandardsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
       } catch { }
     })();
 
-    // Subjects
-    (async () => {
-      try {
-        const res = await fetch(`${API}/teacher/subjects`, { headers: headers() });
-        const data = await res.json();
-        const items = data?.subjects || data?.data?.subjects || data?.data || [];
-        setSubjectsList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
-      } catch { }
-    })();
+    // Subjects (default — all subjects, will be re-fetched when standard changes)
+    fetchSubjectsForStandard(null);
 
     // Languages
     (async () => {
       try {
-        const res = await fetch(`${API}/teacher/languages`, { headers: headers() });
-        const data = await res.json();
+        const res = await api.get("/get/languages");
+        const data = res.data;
         const items = data?.languages || data?.data?.languages || data?.data || [];
         setLanguagesList(Array.isArray(items) ? items.filter((i: any) => i.status === 1) : []);
       } catch { }
@@ -125,8 +140,8 @@ export default function TutorsPage() {
     // Countries
     (async () => {
       try {
-        const res = await fetch(`${API}/get/countries`);
-        const data = await res.json();
+        const res = await api.get("/get/countries");
+        const data = res.data;
         const items = Array.isArray(data) ? data : data?.data || [];
         setCountriesList(items.filter((i: any) => i.is_available === 1));
       } catch { }
@@ -141,7 +156,12 @@ export default function TutorsPage() {
       params.append("page", String(page));
 
       if (searchQuery.trim()) params.append("keyword", searchQuery.trim());
-      if (selectedSubject && selectedSubject !== "all") params.append("subjects", selectedSubject);
+      
+      // ✨ CHANGED: Multiple subjects sent as comma-separated
+      if (selectedSubjects.length > 0) {
+        params.append("subjects", selectedSubjects.join(","));
+      }
+      
       if (selectedStandard && selectedStandard !== "all") params.append("classes", selectedStandard);
       if (selectedLanguage && selectedLanguage !== "all") params.append("language[]", selectedLanguage);
       if (selectedCountry && selectedCountry !== "all") params.append("countries[]", selectedCountry);
@@ -156,8 +176,13 @@ export default function TutorsPage() {
       // Max rate
       if (maxRate[0] < 500) params.append("rate_per_hour", String(maxRate[0]));
 
-      const res = await fetch(`${API}/teacher/listing?${params.toString()}`);
-      const json = await res.json();
+      // ✨ Sort by — backend ko batao kaunsa sort chahiye
+      // "relevant" = backend smart ranking apply karega (logged-in students ke liye)
+      params.append("sort_by", sortBy);
+
+      const res = await api.get(`/teacher/listing?${params.toString()}`);      
+
+      const json = res.data;
 
       const teachersData = json?.data || [];
       const mapped: Tutor[] = teachersData.map((t: any) => ({
@@ -191,13 +216,22 @@ export default function TutorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedSubject, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
+    // ✨ CHANGED: selectedSubject → selectedSubjects
+  }, [searchQuery, selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
 
+  // When standard changes, refetch subjects for that standard
+  useEffect(() => {
+    fetchSubjectsForStandard(selectedStandard);
+    // ✨ CHANGED: Reset selected subjects (array) when standard changes
+    setSelectedSubjects([]);
+  }, [selectedStandard]);  
+  
   // Fetch on filter change (reset to page 1)
   useEffect(() => {
     setCurrentPage(1);
     fetchTutors(1);
-  }, [selectedSubject, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
+    // ✨ CHANGED: selectedSubject → selectedSubjects
+  }, [selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
 
   // Debounced search
   useEffect(() => {
@@ -239,7 +273,8 @@ export default function TutorsPage() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setSelectedSubject("all");
+    // ✨ CHANGED: Reset to empty array
+    setSelectedSubjects([]);
     setSelectedStandard("all");
     setSelectedLanguage("all");
     setSelectedCountry("all");
@@ -249,8 +284,9 @@ export default function TutorsPage() {
     setSortBy("relevant");
   };
 
+  // ✨ CHANGED: Check selectedSubjects.length instead of selectedSubject !== "all"
   const hasActiveFilters =
-    selectedSubject !== "all" ||
+    selectedSubjects.length > 0 ||
     selectedStandard !== "all" ||
     selectedLanguage !== "all" ||
     selectedCountry !== "all" ||
@@ -364,23 +400,76 @@ export default function TutorsPage() {
                       </Select>
                     </div>
 
-                    {/* Subject */}
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Subject</label>
-                      <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="All Subjects" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Subjects</SelectItem>
-                          {subjectsList.map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+{/* Subject — Dropdown with checkboxes inside */}
+<div>
+  <label className="block text-sm font-medium text-foreground mb-2">Subject</label>
+  <Select
+    value="placeholder"
+    onValueChange={() => {}}
+  >
+    <SelectTrigger>
+      <SelectValue>
+        {selectedSubjects.length === 0
+          ? "All Subjects"
+          : selectedSubjects.length === 1
+          ? subjectsList.find((s) => String(s.id) === selectedSubjects[0])?.name || "1 subject"
+          : `${selectedSubjects.length} subjects selected`}
+      </SelectValue>
+    </SelectTrigger>
+    <SelectContent className="max-h-72">
+      {/* Clear all option (only if something selected) */}
+      {selectedSubjects.length > 0 && (
+        <div
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setSelectedSubjects([]);
+          }}
+          className="px-2 py-2 mb-1 text-xs text-primary hover:bg-muted rounded cursor-pointer font-medium border-b border-border"
+        >
+          ✕ Clear all ({selectedSubjects.length})
+        </div>
+      )}
+
+      {/* Subjects list with checkboxes */}
+      {subjectsList.length === 0 ? (
+        <div className="px-2 py-3 text-xs text-muted-foreground">No subjects available</div>
+      ) : (
+        subjectsList.map((s) => {
+          const idStr = String(s.id);
+          const isChecked = selectedSubjects.includes(idStr);
+          return (
+            <div
+              key={s.id}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isChecked) {
+                  setSelectedSubjects(selectedSubjects.filter((id) => id !== idStr));
+                } else {
+                  setSelectedSubjects([...selectedSubjects, idStr]);
+                }
+              }}
+              className={`flex items-center gap-2 px-2 py-2 rounded cursor-pointer transition-colors ${
+                isChecked
+                  ? "bg-yellow-100 text-yellow-900 font-medium hover:bg-yellow-200"
+                  : "hover:bg-muted text-foreground"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                readOnly
+                className="w-4 h-4 rounded border-border accent-yellow-500 cursor-pointer pointer-events-none"
+              />
+              <span className="text-sm select-none flex-1">{s.name}</span>
+            </div>
+          );
+        })
+      )}
+    </SelectContent>
+  </Select>
+</div> 
 
                     {/* Language */}
                     <div>
@@ -518,7 +607,10 @@ export default function TutorsPage() {
                   <>
                     <div className="space-y-6">
                       {sortedTutors.map((tutor, index) => {
-                        const isLocked = !unlockedTutorIds.has(tutor.id);
+                        // ─── Lock logic ───
+                        // Locked = NOT unlocked AND NOT own profile
+                        const isOwnProfile = currentUserId !== null && tutor.id === currentUserId;
+                        const isLocked = !unlockedTutorIds.has(tutor.id) && !isOwnProfile;
                         return (
                           <motion.div
                             key={tutor.id}

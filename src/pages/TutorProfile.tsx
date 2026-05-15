@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { MessageSquare } from "lucide-react";
+import { Phone, Mail, AlertCircle, Send, FileText, MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
 import {
   Star,
@@ -59,6 +59,54 @@ function formatTime12h(time24: string): string {
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+// Convert UTC time string to GMT 12-hour label
+function formatTimeUTCtoGMT(timeUTC: string | null | undefined): string {
+  if (!timeUTC) return "—";
+  const cleaned = timeUTC.length >= 5 ? timeUTC.substring(0, 5) : timeUTC;
+  return `${formatTime12h(cleaned)} GMT`;
+}
+
+// ━━━ Convert UTC time string to tutor's local timezone ━━━
+function formatTimeUTCtoTutorLocal(
+  timeUTC: string | null | undefined,
+  tutorTimezone: string | null | undefined
+): string {
+  if (!timeUTC || !tutorTimezone) return "—";
+
+  try {
+    const cleaned = timeUTC.length >= 5 ? timeUTC.substring(0, 5) : timeUTC;
+    const [hours, minutes] = cleaned.split(":").map(Number);
+
+    const today = new Date();
+    const utcDate = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+      hours,
+      minutes,
+      0
+    ));
+
+    const localTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: tutorTimezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(utcDate);
+
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tutorTimezone,
+      timeZoneName: "short",
+    }).formatToParts(utcDate);
+    const abbr = parts.find((p) => p.type === "timeZoneName")?.value || "";
+
+    return `${localTime} ${abbr}`.trim();
+  } catch (err) {
+    console.error("Failed to convert to tutor local:", err);
+    return "—";
+  }
+}
+
 const shortToFull: Record<number, string> = {
   0: "sunday",
   1: "monday",
@@ -69,13 +117,59 @@ const shortToFull: Record<number, string> = {
   6: "saturday",
 };
 
+const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const dayLabel = (d: string) => d.charAt(0).toUpperCase() + d.slice(1);
+
+// ━━━ Hard-coded dispute reasons ━━━
+const DISPUTE_REASONS = [
+  { value: "tutor-not-responding",     label: "Tutor not responding" },
+  { value: "fake-or-wrong-info",       label: "Fake / Wrong information in profile" },
+  { value: "tutor-refused-to-teach",   label: "Tutor refused to teach" },
+  { value: "rude-or-unprofessional",   label: "Rude / Unprofessional behavior" },
+  { value: "other",                    label: "Other" },
+];
+
+// ━━━ Dispute status helpers ━━━
+const getDisputeStatusLabel = (status: number): string => {
+  switch (status) {
+    case 1: return "Opened";
+    case 2: return "Closed";
+    case 3: return "Resolved";
+    default: return "Unknown";
+  }
+};
+
+const getDisputeStatusColor = (status: number): string => {
+  switch (status) {
+    case 1: return "bg-yellow-100 text-yellow-700 border-yellow-300";
+    case 2: return "bg-red-100 text-red-700 border-red-300";
+    case 3: return "bg-green-100 text-green-700 border-green-300";
+    default: return "bg-gray-100 text-gray-700 border-gray-300";
+  }
+};
+
+const getDisputeStatusIcon = (status: number): string => {
+  switch (status) {
+    case 1: return "🟡";
+    case 2: return "❌";
+    case 3: return "✅";
+    default: return "⚪";
+  }
+};
+
 type TutorData = {
   id: number;
   name: string;
   last_name: string;
   email: string;
+  phone?: string;
   is_verified: number;
-  country: { name: string; timezone?: string } | null;
+  country: {
+    name: string;
+    timezone?: string;
+    calling_code?: string;
+    calling_digits?: string;
+  } | null;
   languages: { name: string }[];
   subjects: { name: string }[];
   profile: {
@@ -86,26 +180,8 @@ type TutorData = {
     profile_img: string;
     intro_fee?: number;
   } | null;
-  education: {
-    id: number;
-    title: string;
-    type: string;
-    institute_name: string;
-    location: string;
-    start_time: string;
-    end_time: string | null;
-    still_study: number;
-  }[];
-  experience: {
-    id: number;
-    title: string;
-    type: string;
-    company_name: string;
-    location: string;
-    start_time: string;
-    end_time: string | null;
-    still_work: number;
-  }[];
+  education: any[];
+  experience: any[];
   schedule: {
     day_name: string;
     start_time: string | null;
@@ -121,29 +197,63 @@ type SlotInfo = {
   label: string;
 };
 
+type DisputeData = {
+  id: number;
+  ticket_no: string;
+  status: number;
+  status_label: string;
+  reason: string;
+  created_at: string;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  refund_amount: number;
+};
+
+type DiscussionMessage = {
+  id: number;
+  comment: string;
+  file?: string | null;
+  created_at: string;
+  user?: {
+    id: number;
+    name: string;
+    role?: string;
+  } | null;
+};
+
+type ReviewData = {
+  id: number;
+  rate: number;
+  comment: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export default function TutorProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { unlockTutor, isTutorUnlocked } = useUnlockedTutors();
 
+  // Logged-in user info
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user?.id) setCurrentUserId(user.id);
+      const role = user?.role?.[0]?.name || null;
+      setCurrentUserRole(role);
+    } catch {
+      setCurrentUserId(null);
+      setCurrentUserRole(null);
+    }
+  }, []);
+
   const [tutor, setTutor] = useState<TutorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [studentTimezone, setStudentTimezone] = useState(getLocalTimezone());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<SlotInfo | null>(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [bookingConfirmed, setBookingConfirmed] = useState(false);
-  const [bookingLoading, setBookingLoading] = useState(false);
-  const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [sessionType, setSessionType] = useState<"demo" | "private" | "group" | null>(null);
-  const [sessionTypeError, setSessionTypeError] = useState(false);
-  const DEMO_LIMIT = 3;
-  const [demosUsed] = useState(1);
-  const demosRemaining = DEMO_LIMIT - demosUsed;
-  const demoLimitReached = demosRemaining <= 0;
-
+  // Profile unlock states
   const [profileUnlocked, setProfileUnlocked] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -154,21 +264,46 @@ export default function TutorProfile() {
   const [cardCvc, setCardCvc] = useState("");
   const [cardName, setCardName] = useState("");
 
-  // ━━━ NEW: Stripe & Intro Fee states ━━━
-  const [stripeKey, setStripeKey] = useState("");  // pk_test_... from backend
+  // Contact details popup state
+  const [showContactModal, setShowContactModal] = useState(false);
+
+  // Stripe & Intro Fee states
+  const [stripeKey, setStripeKey] = useState("");
   const [introFeeFromAPI, setIntroFeeFromAPI] = useState<number | null>(null);
   const [introFeeCurrency, setIntroFeeCurrency] = useState("usd");
   const [introFeeLoading, setIntroFeeLoading] = useState(false);
 
-  // Slots from API
-  const [daySlots, setDaySlots] = useState<SlotInfo[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
+  // ━━━ DISPUTE STATES ━━━
+  const [introFeeId, setIntroFeeId] = useState<number | null>(null);
+  const [existingDispute, setExistingDispute] = useState<DisputeData | null>(null);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
 
-  // Cache: which dates have availability
-  const [availabilityCache, setAvailabilityCache] = useState<Record<string, SlotInfo[]>>({});
-  const [weekLoading, setWeekLoading] = useState(false);
+  // Dispute form state
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeDescription, setDisputeDescription] = useState("");
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeFormError, setDisputeFormError] = useState("");
 
-  // ━━━ Fetch Stripe publishable key from backend ━━━
+  // Existing dispute view state
+  const [disputeMessages, setDisputeMessages] = useState<DiscussionMessage[]>([]);
+  const [disputeLoadingDetails, setDisputeLoadingDetails] = useState(false);
+
+  // Send message state
+  const [newMessage, setNewMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  // ━━━ RATING STATES ━━━
+  const [activeTab, setActiveTab] = useState<"dispute" | "rating">("dispute");
+  const [existingReview, setExistingReview] = useState<ReviewData | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [ratingValue, setRatingValue] = useState<number>(0);
+  const [ratingHover, setRatingHover] = useState<number>(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingFormError, setRatingFormError] = useState("");
+  const [editingRating, setEditingRating] = useState(false);
+
+  // ━━━ Fetch Stripe publishable key ━━━
   useEffect(() => {
     const fetchStripeKey = async () => {
       try {
@@ -189,13 +324,12 @@ export default function TutorProfile() {
     const fetchTutor = async () => {
       setLoading(true);
       try {
-        const response = await api.get(`/teacher/?user_id=${id}`);
+        const response = await api.get(`/teacher?user_id=${id}`);
         const data = response.data?.data || response.data;
         if (!data || !data.id) {
           setNotFound(true);
         } else {
           setTutor(data);
-          // Don't set profileUnlocked from local context yet — wait for API check
         }
       } catch (error) {
         setNotFound(true);
@@ -206,30 +340,56 @@ export default function TutorProfile() {
     fetchTutor();
   }, [id]);
 
-  // ━━━ Check intro fee status from backend (real unlock check) ━━━
+  // Role-based flags
+  const isLoggedInTutor = currentUserRole === "teacher";
+  const isOwnProfile = tutor !== null && currentUserId !== null && tutor.id === currentUserId;
+  const hideTutorActions = isLoggedInTutor;
+
+  // ━━━ Check intro fee status from backend ━━━
   useEffect(() => {
     if (!tutor) return;
+
+    if (isLoggedInTutor) {
+      setProfileUnlocked(false);
+      return;
+    }
+
+    if (isOwnProfile) {
+      setProfileUnlocked(true);
+      return;
+    }
 
     const checkIntroFee = async () => {
       setIntroFeeLoading(true);
       try {
         const res = await api.get(`/tutor/check-intro-fee?teacher_id=${tutor.id}`);
         const data = res.data;
-        // Response: { unlocked: true/false, intro_fee: 30, currency: "usd" }
         const unlocked = data?.unlocked === true;
         setProfileUnlocked(unlocked);
+
         if (unlocked) {
-          unlockTutor(tutor.id); // sync local context
+          unlockTutor(tutor.id);
         }
+
         if (data?.intro_fee !== undefined) {
           setIntroFeeFromAPI(data.intro_fee);
         }
         if (data?.currency) {
           setIntroFeeCurrency(data.currency);
         }
+
+        if (data?.intro_fee_id) {
+          setIntroFeeId(data.intro_fee_id);
+        }
+
+        if (data?.has_dispute && data?.dispute) {
+          setExistingDispute(data.dispute);
+        } else {
+          setExistingDispute(null);
+        }
+
       } catch (err) {
         console.error("Failed to check intro fee:", err);
-        // Fallback to local context
         setProfileUnlocked(isTutorUnlocked(tutor.id));
       } finally {
         setIntroFeeLoading(false);
@@ -237,249 +397,35 @@ export default function TutorProfile() {
     };
 
     checkIntroFee();
-  }, [tutor]);
+  }, [tutor, isLoggedInTutor, isOwnProfile]);
 
-  // Helper: check if a day is available from schedule
-  const isDayInSchedule = useCallback((date: Date) => {
-    if (!tutor?.schedule) return false;
-    const dayName = shortToFull[date.getDay()];
-    return tutor.schedule.some(
-      (s) => s.day_name === dayName && s.is_available === 1 && s.start_time && s.end_time
-    );
-  }, [tutor]);
-
-  // Fetch available slots for entire visible week from API
-  const fetchWeekAvailability = useCallback(async () => {
-    if (!tutor || !id) return;
-
-    setWeekLoading(true);
-    const newCache: Record<string, SlotInfo[]> = {};
-
-    const promises: Promise<void>[] = [];
-
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(weekStart, i);
-      const today = startOfDay(new Date());
-      if (isBefore(d, today)) continue;
-      if (!isDayInSchedule(d)) continue;
-
-      const dateStr = format(d, "MM/dd/yyyy");
-      const dateKey = format(d, "yyyy-MM-dd");
-
-      const appointmentType = sessionType === "group" ? 2 : 1;
-
-      const fetchDay = async () => {
-        try {
-          if (sessionType === "demo") {
-            const formData = new FormData();
-            formData.append("teacher_id", String(tutor.id));
-            formData.append("user_id", String(tutor.id));
-            formData.append("start_date", format(d, "yyyy-MM-dd"));
-            formData.append("demo", "1");
-
-            const res = await api.post("/booking/available/slot", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            });
-            const slots = parseSlotsFromResponse(res.data);
-            newCache[dateKey] = slots;
-          } else {
-            const formData = new FormData();
-            formData.append("teacher_id", String(tutor.id));
-            formData.append("user_id", String(tutor.id));
-            formData.append("start_date", dateStr);
-            formData.append("end_date", dateStr);
-            formData.append("appointment_type", String(appointmentType));
-
-            const res = await api.post("/booking/available/slot", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            });
-            const slots = parseSlotsFromResponse(res.data);
-            newCache[dateKey] = slots;
-          }
-        } catch (err) {
-          console.error(`Failed to fetch slots for ${dateKey}:`, err);
-          newCache[dateKey] = [];
-        }
-      };
-
-      promises.push(fetchDay());
-    }
-
-    await Promise.all(promises);
-    setAvailabilityCache(newCache);
-    setWeekLoading(false);
-  }, [tutor, id, weekStart, sessionType, isDayInSchedule]);
-
-  // Parse response from backend to extract slot times
-  function parseSlotsFromResponse(response: any): SlotInfo[] {
-    try {
-      let data = response;
-
-      if (typeof data === "string") {
-        try {
-          data = JSON.parse(data);
-        } catch {
-          return [];
-        }
-      }
-
-      const slots: SlotInfo[] = [];
-
-      if (data?.availableSlots && Array.isArray(data.availableSlots)) {
-        for (const dayData of data.availableSlots) {
-          if (dayData.available_slot && Array.isArray(dayData.available_slot)) {
-            for (const time of dayData.available_slot) {
-              slots.push({
-                time: time,
-                label: formatTime12h(time),
-              });
-            }
-          }
-        }
-      }
-
-      return slots;
-    } catch (err) {
-      console.error("Failed to parse slots response:", err);
-      return [];
-    }
-  }
-
-  // Fetch week availability when week changes, session type changes, or tutor loads
+  // ━━━ Fetch existing review for this tutor (if any) ━━━
   useEffect(() => {
-    if (tutor && sessionType) {
-      fetchWeekAvailability();
-    }
-  }, [tutor, weekStart, sessionType, fetchWeekAvailability]);
+    if (!tutor || !profileUnlocked || isOwnProfile || isLoggedInTutor) return;
 
-  // When a date is selected, fetch FRESH slots from API
-  useEffect(() => {
-    if (!selectedDate || !tutor || !sessionType) {
-      setDaySlots([]);
-      return;
-    }
-
-    const fetchSelectedDateSlots = async () => {
-      setSlotsLoading(true);
-      const dateKey = format(selectedDate, "yyyy-MM-dd");
-      const dateStr = format(selectedDate, "MM/dd/yyyy");
-      const appointmentType = sessionType === "group" ? 2 : 1;
-
+    const fetchMyReview = async () => {
+      setReviewLoading(true);
       try {
-        const formData = new FormData();
-        formData.append("teacher_id", String(tutor.id));
-        formData.append("user_id", String(tutor.id));
-
-        if (sessionType === "demo") {
-          formData.append("start_date", dateKey);
-          formData.append("demo", "1");
+        const res = await api.get(`/intro-fee/review/my-review?teacher_id=${tutor.id}`);
+        if (res.data?.has_review && res.data?.review) {
+          setExistingReview(res.data.review);
+          setRatingValue(res.data.review.rate);
+          setRatingComment(res.data.review.comment || "");
         } else {
-          formData.append("start_date", dateStr);
-          formData.append("end_date", dateStr);
-          formData.append("appointment_type", String(appointmentType));
+          setExistingReview(null);
         }
-
-        const res = await api.post("/booking/available/slot", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-
-        const slots = parseSlotsFromResponse(res.data);
-        setDaySlots(slots);
-
-        setAvailabilityCache((prev) => ({ ...prev, [dateKey]: slots }));
       } catch (err) {
-        console.error(`Failed to fetch slots for ${dateKey}:`, err);
-        setDaySlots([]);
+        console.error("Failed to fetch existing review:", err);
       } finally {
-        setSlotsLoading(false);
+        setReviewLoading(false);
       }
     };
 
-    fetchSelectedDateSlots();
-  }, [selectedDate, tutor, sessionType]);
+    fetchMyReview();
+  }, [tutor, profileUnlocked, isOwnProfile, isLoggedInTutor]);
 
-  // Check if a date has available slots
-  const hasAvailability = (date: Date) => {
-    const dateKey = format(date, "yyyy-MM-dd");
-    const cached = availabilityCache[dateKey];
-    if (cached !== undefined) {
-      return cached.length > 0;
-    }
-    return isDayInSchedule(date);
-  };
-
-  const handleBookSlot = (date: Date, slot: SlotInfo) => {
-    if (!sessionType) {
-      setSessionTypeError(true);
-      return;
-    }
-    setSessionTypeError(false);
-    setSelectedDate(date);
-    setSelectedSlot(slot);
-    setShowConfirmation(true);
-  };
-
-  const confirmBooking = async () => {
-    if (!tutor || !selectedDate || !selectedSlot || !sessionType) return;
-
-    setBookingLoading(true);
-    try {
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-
-      if (sessionType === "demo") {
-        const formData = new FormData();
-        formData.append("teacher_id", String(tutor.id));
-        formData.append("date", dateStr);
-        formData.append("slot[0][date]", dateStr);
-        formData.append("slot[0][time][]", selectedSlot.time);
-
-        await api.post("/booking/demo/store", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } else {
-        const formData = new FormData();
-        formData.append("teacher_id", String(tutor.id));
-        formData.append("start_date", format(selectedDate, "MM/dd/yyyy"));
-        formData.append("end_date", format(selectedDate, "MM/dd/yyyy"));
-        formData.append("slot[0][date]", dateStr);
-        formData.append("slot[0][time][]", selectedSlot.time);
-        formData.append("appointment_type", sessionType === "group" ? "2" : "1");
-
-        await api.post("/booking/create", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      }
-
-      setBookingConfirmed(true);
-      toast({
-        title: "Booking Confirmed!",
-        description: `Your ${sessionType} session has been booked successfully.`,
-      });
-    } catch (error: any) {
-      console.error("Booking error:", error);
-      toast({
-        title: "Booking Failed",
-        description: error.response?.data?.message || "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setBookingLoading(false);
-    }
-  };
-
-  const resetBooking = () => {
-    setShowConfirmation(false);
-    setBookingConfirmed(false);
-    setSelectedDate(null);
-    setSelectedSlot(null);
-    setBookingLoading(false);
-  };
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ━━━ REAL STRIPE PAYMENT for Intro Fee ━━━
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━ STRIPE PAYMENT for Intro Fee ━━━
   const handlePayment = async () => {
-    // Validate card fields
     const cleanCard = cardNumber.replace(/\s/g, "");
     if (!cardName.trim()) {
       setPaymentError("Please enter the name on card.");
@@ -506,7 +452,6 @@ export default function TutorProfile() {
     setPaymentProcessing(true);
 
     try {
-      // ━━━ Step 1: Create Stripe Token from card details ━━━
       const [expMonth, expYear] = cardExpiry.split("/");
       const fullYear = expYear.length === 2 ? `20${expYear}` : expYear;
 
@@ -529,14 +474,13 @@ export default function TutorProfile() {
       const stripeData = await stripeRes.json();
 
       if (stripeData.error) {
-        setPaymentError(stripeData.error.message || "Card validation failed. Please check your card details.");
+        setPaymentError(stripeData.error.message || "Card validation failed.");
         setPaymentProcessing(false);
         return;
       }
 
-      const stripeToken = stripeData.id; // tok_...
+      const stripeToken = stripeData.id;
 
-      // ━━━ Step 2: Send token to backend to process payment ━━━
       const payRes = await api.post("/tutor/pay-intro-fee", {
         teacher_id: tutor?.id,
         stripe_token: stripeToken,
@@ -545,23 +489,32 @@ export default function TutorProfile() {
       const payData = payRes.data;
 
       if (payData?.success === false || payData?.error) {
-        setPaymentError(payData?.message || payData?.error || "Payment failed. Please try again.");
+        setPaymentError(payData?.message || payData?.error || "Payment failed.");
         setPaymentProcessing(false);
         return;
       }
 
-      // ━━━ Step 3: Payment successful! ━━━
       setPaymentProcessing(false);
       setPaymentSuccess(true);
       setProfileUnlocked(true);
       if (tutor) unlockTutor(tutor.id);
 
+      setTimeout(async () => {
+        try {
+          const res = await api.get(`/tutor/check-intro-fee?teacher_id=${tutor?.id}`);
+          if (res.data?.intro_fee_id) {
+            setIntroFeeId(res.data.intro_fee_id);
+          }
+        } catch (e) {
+          console.error("Failed to refetch intro fee info:", e);
+        }
+      }, 500);
+
       toast({
         title: "Profile Unlocked!",
-        description: `You now have full access to ${tutorName}'s profile and booking calendar.`,
+        description: `You can now view ${tutorName}'s contact details.`,
       });
 
-      // Close modal after 1.5s
       setTimeout(() => {
         setShowPaymentModal(false);
         setPaymentSuccess(false);
@@ -569,17 +522,260 @@ export default function TutorProfile() {
         setCardExpiry("");
         setCardCvc("");
         setCardName("");
+        setShowContactModal(true);
       }, 1500);
 
     } catch (err: any) {
       console.error("Payment error:", err);
-      const errMsg = err.response?.data?.message || err.message || "Payment failed. Please try again.";
+      const errMsg = err.response?.data?.message || err.message || "Payment failed.";
       setPaymentError(errMsg);
       setPaymentProcessing(false);
     }
   };
 
-  // Loading state
+  const handleContactClick = () => {
+    if (profileUnlocked) {
+      setShowContactModal(true);
+    } else {
+      setShowPaymentModal(true);
+    }
+  };
+
+  // ━━━ DISPUTE FUNCTIONS ━━━
+  const handleDisputeClick = async () => {
+    if (!introFeeId) {
+      toast({
+        title: "Cannot open dispute",
+        description: "Intro fee information not available. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setShowDisputeModal(true);
+    setActiveTab("dispute");
+
+    if (existingDispute) {
+      await loadDisputeDetails();
+    } else {
+      setDisputeReason("");
+      setDisputeDescription("");
+      setDisputeFormError("");
+    }
+  };
+
+  const loadDisputeDetails = async () => {
+    if (!introFeeId) return;
+
+    setDisputeLoadingDetails(true);
+    try {
+      const res = await api.get(`/intro-fee/dispute/${introFeeId}`);
+      const data = res.data?.data;
+
+      if (data?.has_dispute && data?.data) {
+        setExistingDispute({
+          id: data.data.id,
+          ticket_no: data.data.ticket_no,
+          status: data.data.status,
+          status_label: data.data.status_label,
+          reason: data.data.reason,
+          created_at: data.data.created_at,
+          resolved_at: data.data.resolved_at,
+          closed_at: data.data.closed_at,
+          refund_amount: data.data.refund_amount || 0,
+        });
+
+        if (data.data.discussions && Array.isArray(data.data.discussions)) {
+          setDisputeMessages(data.data.discussions);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to load dispute details:", err);
+      toast({
+        title: "Failed to load dispute",
+        description: err.response?.data?.error || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDisputeLoadingDetails(false);
+    }
+  };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ━━━ Submit new dispute — ✨ RATING IS REQUIRED FIRST ━━━
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const handleSubmitDispute = async () => {
+    setDisputeFormError("");
+
+    // ✨ NEW: Rating is REQUIRED before submitting dispute
+    if (!existingReview) {
+      setDisputeFormError("Please rate this tutor first before submitting a dispute. Switch to the Rating tab to add your rating.");
+      return;
+    }
+
+    // Validation
+    if (!disputeReason) {
+      setDisputeFormError("Please select a reason for the dispute.");
+      return;
+    }
+    if (!disputeDescription.trim() || disputeDescription.trim().length < 10) {
+      setDisputeFormError("Please provide a description (at least 10 characters).");
+      return;
+    }
+    if (!introFeeId) {
+      setDisputeFormError("Intro fee information missing.");
+      return;
+    }
+
+    setDisputeSubmitting(true);
+    try {
+      const res = await api.post("/intro-fee/dispute/open", {
+        intro_fee_id: introFeeId,
+        reason: disputeReason,
+        description: disputeDescription.trim(),
+      });
+
+      const data = res.data?.data;
+
+      if (data?.data) {
+        toast({
+          title: "Dispute Submitted ✅",
+          description: `Your dispute has been submitted. Ticket: ${data.data.ticket_no}`,
+        });
+
+        setExistingDispute({
+          id: data.data.id,
+          ticket_no: data.data.ticket_no,
+          status: data.data.status,
+          status_label: data.data.status_label,
+          reason: data.data.reason,
+          created_at: data.data.created_at,
+          resolved_at: data.data.resolved_at,
+          closed_at: data.data.closed_at,
+          refund_amount: data.data.refund_amount || 0,
+        });
+
+        if (data.data.discussions && Array.isArray(data.data.discussions)) {
+          setDisputeMessages(data.data.discussions);
+        }
+
+        setDisputeReason("");
+        setDisputeDescription("");
+      }
+    } catch (err: any) {
+      console.error("Submit dispute error:", err);
+      const errMsg = err.response?.data?.error
+                  || err.response?.data?.message
+                  || err.response?.data?.errors?.intro_fee_id?.[0]
+                  || err.response?.data?.errors?.reason?.[0]
+                  || "Failed to submit dispute. Please try again.";
+      setDisputeFormError(typeof errMsg === "string" ? errMsg : "Failed to submit dispute.");
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !existingDispute) return;
+
+    if (existingDispute.status === 2 || existingDispute.status === 3) {
+      toast({
+        title: "Dispute is closed",
+        description: "No more messages can be sent.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingMessage(true);
+    try {
+      await api.post("/intro-fee/dispute/message/send", {
+        dispute_id: existingDispute.id,
+        comment: newMessage.trim(),
+      });
+
+      await loadDisputeDetails();
+      setNewMessage("");
+
+      toast({
+        title: "Message sent",
+      });
+    } catch (err: any) {
+      console.error("Send message error:", err);
+      toast({
+        title: "Failed to send message",
+        description: err.response?.data?.error || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleCloseDisputeModal = () => {
+    setShowDisputeModal(false);
+    setDisputeReason("");
+    setDisputeDescription("");
+    setDisputeFormError("");
+    setNewMessage("");
+    setRatingFormError("");
+    setEditingRating(false);
+  };
+
+  // ━━━ RATING SUBMIT FUNCTION ━━━
+  const handleSubmitRating = async () => {
+    setRatingFormError("");
+
+    if (ratingValue < 1 || ratingValue > 5) {
+      setRatingFormError("Please select a rating between 1 and 5 stars.");
+      return;
+    }
+
+    if (!tutor) {
+      setRatingFormError("Tutor information missing.");
+      return;
+    }
+
+    setRatingSubmitting(true);
+    try {
+      const res = await api.post("/intro-fee/review/store", {
+        teacher_id: tutor.id,
+        rate: ratingValue,
+        comment: ratingComment.trim() || null,
+      });
+
+      const data = res.data;
+
+      if (data?.success && data?.data) {
+        toast({
+          title: existingReview ? "Rating Updated ⭐" : "Rating Submitted ⭐",
+          description: existingReview
+            ? "Your review has been updated successfully."
+            : "Thank you for rating this tutor!",
+        });
+
+        setExistingReview({
+          id: data.data.id,
+          rate: data.data.rate,
+          comment: data.data.comment,
+          created_at: data.data.created_at,
+          updated_at: data.data.updated_at,
+        });
+        setEditingRating(false);
+      }
+    } catch (err: any) {
+      console.error("Submit rating error:", err);
+      const errMsg = err.response?.data?.error
+                  || err.response?.data?.message
+                  || "Failed to submit rating. Please try again.";
+      setRatingFormError(typeof errMsg === "string" ? errMsg : "Failed to submit rating.");
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  // ━━━ RENDER ━━━
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -595,7 +791,6 @@ export default function TutorProfile() {
     );
   }
 
-  // Not found state
   if (notFound || !tutor) {
     return (
       <div className="min-h-screen bg-background">
@@ -616,14 +811,25 @@ export default function TutorProfile() {
   const tutorName = `${tutor.name || ""} ${tutor.last_name || ""}`.trim();
   const hourlyRate = tutor.profile?.rate_per_hour || 0;
   const groupRate = tutor.profile?.group_rate_per_hour || 0;
-  // Use intro fee from API if available, otherwise fallback to profile data
   const introFee = introFeeFromAPI !== null ? introFeeFromAPI : (tutor.profile?.intro_fee || 10);
   const currencySymbol = introFeeCurrency === "usd" ? "$" : introFeeCurrency.toUpperCase() + " ";
   const avatar = tutor.profile?.profile_img || `https://ui-avatars.com/api/?name=${tutor.name}&background=random`;
-  const sessionFee = sessionType === "demo" ? 0 : sessionType === "group" ? groupRate : hourlyRate;
-  const sessionTypeLabel = sessionType === "demo" ? "Demo Session" : sessionType === "group" ? "Group Session" : "Private Session";
-  const blurClass = profileUnlocked ? "" : "blur-sm select-none pointer-events-none";
-  const tutorTimezone = tutor.country?.timezone || "Asia/Karachi";
+
+  const tutorEmail = tutor.email || "";
+  const tutorPhone = tutor.phone
+    ? `+${tutor.country?.calling_code || ""} ${tutor.phone}`
+    : "";
+
+  const shouldBlur = !isOwnProfile && !profileUnlocked;
+  const blurClass = shouldBlur ? "blur-sm select-none pointer-events-none" : "";
+
+  const sortedSchedule = (tutor.schedule || [])
+    .filter((s) => s.is_available === 1 && s.start_time && s.end_time)
+    .sort((a, b) => DAY_ORDER.indexOf(a.day_name) - DAY_ORDER.indexOf(b.day_name));
+
+  const canShowDisputeButton = !hideTutorActions && !isOwnProfile && profileUnlocked && introFeeId;
+  const hasDispute = !!existingDispute;
+  const isDisputeOpen = existingDispute?.status === 1;
 
   return (
     <div className="min-h-screen bg-background">
@@ -650,7 +856,7 @@ export default function TutorProfile() {
                       alt={tutorName}
                       className={`w-[90px] h-[90px] lg:w-[120px] lg:h-[120px] rounded-full object-cover object-center ring-4 ring-primary/10 shadow-elevated ${blurClass}`}
                     />
-                    {!profileUnlocked && (
+                    {shouldBlur && (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <Lock className="w-8 h-8 text-muted-foreground/60" />
                       </div>
@@ -660,7 +866,7 @@ export default function TutorProfile() {
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
-                          <h1 className={`text-2xl lg:text-3xl text-foreground ${profileUnlocked ? "font-bold" : "font-normal blur-md select-none pointer-events-none"}`}>{tutorName}</h1>
+                          <h1 className={`text-2xl lg:text-3xl text-foreground ${!shouldBlur ? "font-bold" : "font-normal blur-md select-none pointer-events-none"}`}>{tutorName}</h1>
                           {tutor.is_verified === 1 && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-success/10 text-success text-xs font-semibold">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -698,24 +904,60 @@ export default function TutorProfile() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {!profileUnlocked && !introFeeLoading && (
-                          <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
-                            <Lock className="w-4 h-4 mr-1.5" />
-                            Unlock Profile - {currencySymbol}{introFee}
-                          </Button>
-                        )}
-                        {introFeeLoading && (
-                          <Button disabled className="bg-primary/50 text-primary-foreground" size="lg">
-                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                            Checking...
-                          </Button>
-                        )}
-                        <Button onClick={() => navigate(`/student/messages?tutor=${tutor.id}`)} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
-                          <MessageSquare className="w-4 h-4 mr-1.5" />
-                          Message Tutor
-                        </Button>
-                      </div>
+
+                      {/* ━━━ ACTION BUTTONS (vertical layout) ━━━ */}
+                      {!hideTutorActions && (
+                        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                          {introFeeLoading && !isOwnProfile && (
+                            <Button disabled className="bg-primary/50 text-primary-foreground" size="lg">
+                              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                              Checking...
+                            </Button>
+                          )}
+
+                          {/* Contact button */}
+                          {!isOwnProfile && !introFeeLoading && (
+                            <Button onClick={handleContactClick} className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft" size="lg">
+                              {profileUnlocked ? (
+                                <>
+                                  <Phone className="w-4 h-4 mr-1.5" />
+                                  Contact
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="w-4 h-4 mr-1.5" />
+                                  Contact - {currencySymbol}{introFee}
+                                </>
+                              )}
+                            </Button>
+                          )}
+
+                          {/* Dispute Button — only if profile unlocked (paid) */}
+                          {canShowDisputeButton && (
+                            <Button
+                              onClick={handleDisputeClick}
+                              variant={hasDispute ? "outline" : "destructive"}
+                              size="lg"
+                              className={hasDispute ? "border-2" : ""}
+                            >
+                              <AlertCircle className="w-4 h-4 mr-1.5" />
+                              Dispute
+                            </Button>
+                          )}
+
+                          {/* Message Button — ALWAYS visible (paid or unpaid), shown to students only */}
+                          {!hideTutorActions && !isOwnProfile && (
+                            <Button
+                              onClick={() => navigate(`/student/messages?tutor=${tutor.id}`)}
+                              size="lg"
+                              className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft"
+                            >
+                              <MessageSquare className="w-4 h-4 mr-1.5" />
+                              Message
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -727,9 +969,8 @@ export default function TutorProfile() {
         {/* Content Grid */}
         <section className="pb-16 lg:pb-24">
           <div className="section-container">
-            <div className="grid lg:grid-cols-3 gap-8">
-              {/* Left Column */}
-              <div className="lg:col-span-2 space-y-8">
+            <div className={hideTutorActions ? "grid grid-cols-1 gap-8" : "grid lg:grid-cols-3 gap-8"}>
+              <div className={hideTutorActions ? "space-y-8" : "lg:col-span-2 space-y-8"}>
                 {/* About */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card rounded-2xl border border-border p-6 lg:p-8">
                   <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
@@ -784,158 +1025,62 @@ export default function TutorProfile() {
                 )}
               </div>
 
-              {/* Right Column – Booking Calendar */}
-              <div className="lg:col-span-1">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className={`bg-card rounded-2xl border border-border p-6 lg:sticky lg:top-24 relative ${!profileUnlocked ? "overflow-hidden" : ""}`}>
-                  {!profileUnlocked && (
-                    <div className="absolute inset-0 z-10 bg-background/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center gap-3">
-                      <Lock className="w-10 h-10 text-muted-foreground/50" />
-                      <p className="text-sm font-medium text-muted-foreground text-center px-4">Unlock this profile to book sessions</p>
-                      <Button onClick={() => setShowPaymentModal(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                        <Lock className="w-4 h-4 mr-1.5" />
-                        Unlock - {currencySymbol}{introFee}
-                      </Button>
-                    </div>
-                  )}
-                  <h2 className="text-xl font-bold text-foreground mb-2 flex items-center gap-2">
-                    <CalendarIcon className="w-5 h-5 text-primary" />
-                    Book a Session
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-1">Select a day and time slot to book</p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Tutor's timezone: {getTimezoneAbbr(tutorTimezone)} ({tutorTimezone})
-                  </p>
-
-                  {/* Session Type */}
-                  <div className="mb-5">
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Session Type <span className="text-destructive">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {tutor.profile?.demo_class === 1 && (
-                        <button
-                          onClick={() => { if (!demoLimitReached) { setSessionType("demo"); setSessionTypeError(false); setSelectedDate(null); } }}
-                          disabled={demoLimitReached}
-                          className={`p-3 rounded-xl border-2 text-left transition-all sm:col-span-2 ${demoLimitReached ? "border-border opacity-50 cursor-not-allowed" : sessionType === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                        >
-                          <p className={`font-semibold text-sm flex items-center gap-1.5 ${sessionType === "demo" ? "text-primary-foreground" : "text-foreground"}`}>🎁 Demo Session</p>
-                          <p className={`text-sm font-bold ${sessionType === "demo" ? "text-primary-foreground" : "text-primary"}`}>FREE</p>
-                          <p className={`text-xs mt-1 ${sessionType === "demo" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{demosRemaining}/{DEMO_LIMIT} demos remaining</p>
-                        </button>
+              {/* Right Column: Schedule */}
+              {!hideTutorActions && (
+                <div className="lg:col-span-1">
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bg-card rounded-2xl border border-border p-6 lg:sticky lg:top-24">
+                    <h2 className="text-xl font-bold text-foreground mb-2 flex items-center gap-2">
+                      <CalendarIcon className="w-5 h-5 text-primary" />
+                      Tutor's Schedule
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-1">Available days and times</p>
+                    <p className="text-xs text-muted-foreground mb-4 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Times shown in <span className="font-semibold text-foreground">GMT</span>
+                      {tutor.country?.timezone && (
+                        <span className="text-muted-foreground/70"> & tutor's local time</span>
                       )}
-                      <button
-                        onClick={() => { setSessionType("private"); setSessionTypeError(false); setSelectedDate(null); }}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "private" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                      >
-                        <p className={`font-semibold text-sm ${sessionType === "private" ? "text-primary-foreground" : "text-foreground"}`}>Private Session</p>
-                        <p className={`text-sm font-bold ${sessionType === "private" ? "text-primary-foreground" : "text-primary"}`}>${hourlyRate}/hour</p>
-                      </button>
-                      <button
-                        onClick={() => { setSessionType("group"); setSessionTypeError(false); setSelectedDate(null); }}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${sessionType === "group" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-muted-foreground/30"}`}
-                      >
-                        <p className={`font-semibold text-sm ${sessionType === "group" ? "text-primary-foreground" : "text-foreground"}`}>Group Session</p>
-                        <p className={`text-sm font-bold ${sessionType === "group" ? "text-primary-foreground" : "text-primary"}`}>${groupRate}/hour</p>
-                      </button>
-                    </div>
-                    {sessionTypeError && <p className="text-destructive text-xs mt-2">Please select a session type before booking</p>}
-                  </div>
+                    </p>
 
-                  {/* Prompt to select session type first */}
-                  {!sessionType && (
-                    <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
-                      <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                      Please select a session type above to view available slots
-                    </div>
-                  )}
-
-                  {/* Calendar only shows after session type is selected */}
-                  {sessionType && (
-                    <>
-                      {/* Week Calendar */}
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(subWeeks(weekStart, 1)); setSelectedDate(null); }}>← Prev</Button>
-                          <span className="text-sm font-semibold text-foreground">{format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}</span>
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setWeekStart(addWeeks(weekStart, 1)); setSelectedDate(null); }}>Next →</Button>
-                        </div>
-
-                        {weekLoading && (
-                          <div className="flex items-center justify-center py-2 mb-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-primary mr-2" />
-                            <span className="text-xs text-muted-foreground">Loading availability...</span>
+                    {sortedSchedule.length > 0 ? (
+                      <div className="space-y-2">
+                        {sortedSchedule.map((s, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between p-3 rounded-xl border border-border bg-muted/30 gap-3"
+                          >
+                          <div className="flex items-center gap-2 pt-0.5 shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-success" />
+                            <span className="font-semibold text-sm text-foreground">{dayLabel(s.day_name)}</span>
                           </div>
-                        )}
-
-                        <div className="grid grid-cols-7 gap-2">
-                          {Array.from({ length: 7 }).map((_, i) => {
-                            const d = addDays(weekStart, i);
-                            const today = startOfDay(new Date());
-                            const isPast = isBefore(d, today);
-                            const isSelected = selectedDate && isSameDay(d, selectedDate);
-                            const available = hasAvailability(d);
-                            const isToday = isSameDay(d, today);
-                            return (
-                              <button
-                                key={i}
-                                disabled={isPast || !available || weekLoading}
-                                onClick={() => setSelectedDate(d)}
-                                className={`flex flex-col items-center justify-center py-3 rounded-lg text-sm transition-all ${isSelected ? "bg-primary text-primary-foreground font-semibold shadow-soft" : isToday && available ? "bg-accent/20 text-foreground font-medium cursor-pointer" : isPast || !available ? "text-muted-foreground/30 cursor-not-allowed" : "hover:bg-muted text-foreground cursor-pointer"}`}
-                              >
-                                <span className="text-xs font-medium mb-1">{format(d, "EEE")}</span>
-                                <span className="text-base">{format(d, "d")}</span>
-                                {available && !isPast && <span className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? "bg-primary-foreground" : "bg-success"}`} />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Time Slots */}
-                      {selectedDate ? (
-                        daySlots.length > 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-sm font-medium text-foreground">
-                              Available on {format(selectedDate, "EEEE, MMM d")}
-                            </p>
-                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                              {daySlots.map((slot, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => handleBookSlot(selectedDate, slot)}
-                                  className="w-full flex items-center justify-between p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                                >
-                                  <div className="text-left">
-                                    <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
-                                      {slot.label}
-                                    </p>
-                                  </div>
-                                  <Video className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                </button>
-                              ))}
+                          <div className="text-right">
+                            <div className="text-sm text-foreground font-medium">
+                              {formatTimeUTCtoGMT(s.start_time)} – {formatTimeUTCtoGMT(s.end_time)}
                             </div>
-                          </div>
-                        ) : (
-                          <p className="text-center text-sm text-muted-foreground py-4">
-                            {slotsLoading ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Loading slots...
-                              </span>
-                            ) : (
-                              "No slots available for this day."
+                            {tutor.country?.timezone && (
+                              <div className="text-[11px] text-muted-foreground mt-0.5">
+                                Tutor: {formatTimeUTCtoTutorLocal(s.start_time, tutor.country.timezone)} – {formatTimeUTCtoTutorLocal(s.end_time, tutor.country.timezone)}
+                              </div>
                             )}
-                          </p>
-                        )
-                      ) : (
-                        <div className="text-center py-6 text-muted-foreground text-sm">
-                          Select a date to view available time slots
+                          </div>
                         </div>
-                      )}
-                    </>
-                  )}
-                </motion.div>
-              </div>
+                      ))}
+                    </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                        <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                        Tutor has not set their schedule yet
+                      </div>
+                    )}
+
+                    <div className="mt-5 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        💡 Pay the intro fee to unlock the tutor's contact details. You can then arrange your class directly with them based on the schedule above.
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -943,149 +1088,627 @@ export default function TutorProfile() {
 
       <Footer />
 
-      {/* Booking Confirmation Modal */}
-      <Dialog open={showConfirmation} onOpenChange={(open) => !open && resetBooking()}>
-        <DialogContent className="sm:max-w-md">
-          {!bookingConfirmed ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Confirm Your Booking</DialogTitle>
-                <DialogDescription>Review the details below and confirm your session.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="flex items-center gap-4">
-                  <img src={avatar} alt={tutorName} className="w-14 h-14 rounded-xl object-cover" />
-                  <div>
-                    <p className="font-semibold text-foreground">{tutorName}</p>
-                    <p className="text-sm text-primary">{tutor.subjects?.map((s) => s.name).join(" & ")}</p>
-                  </div>
+      {/* ━━━ STRIPE PAYMENT MODAL ━━━ */}
+      {!hideTutorActions && (
+        <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); } }}>
+          <DialogContent className="sm:max-w-md">
+            {paymentSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-success" />
                 </div>
-                <div className="bg-muted rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Session Type</span>
-                    <span className="font-medium text-foreground">{sessionTypeLabel}</span>
+                <h3 className="text-xl font-bold text-foreground mb-2">Payment Successful!</h3>
+                <p className="text-muted-foreground">Opening tutor's contact details...</p>
+              </div>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    Unlock Contact Details
+                  </DialogTitle>
+                  <DialogDescription>
+                    Pay a one-time intro fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to view {tutorName}'s contact details (phone & email). You can then arrange the class directly with the tutor.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                    <p className="text-sm text-muted-foreground">Amount to pay</p>
+                    <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Date</span>
-                    <span className="font-medium text-foreground">{selectedDate && format(selectedDate, "EEEE, MMMM d, yyyy")}</span>
-                  </div>
-                  {selectedSlot && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Time</span>
-                      <span className="font-medium text-foreground">{selectedSlot.label}</span>
+
+                  {stripeKey && stripeKey.startsWith("pk_test") && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                      <p className="text-xs font-medium text-amber-700">🧪 Stripe Test Mode — No real charges</p>
+                      <p className="text-xs text-amber-600 mt-1">Use card: 4242 4242 4242 4242, any future date, any CVC</p>
                     </div>
                   )}
-                  <div className="border-t border-border pt-3 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Session Fee</span>
-                    <span className="font-bold text-foreground text-lg">{sessionType === "demo" ? "FREE" : `$${sessionFee}`}</span>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Name on Card</label>
+                      <Input placeholder="John Doe" value={cardName} onChange={(e) => setCardName(e.target.value)} disabled={paymentProcessing} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Card Number</label>
+                      <Input placeholder="4242 4242 4242 4242" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim())} maxLength={19} disabled={paymentProcessing} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">Expiry MM/YY</label>
+                        <Input placeholder="12/28" value={cardExpiry} onChange={(e) => { let v = e.target.value.replace(/\D/g, "").slice(0, 4); if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2); setCardExpiry(v); }} maxLength={5} disabled={paymentProcessing} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">CVC</label>
+                        <Input placeholder="123" value={cardCvc} onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} disabled={paymentProcessing} />
+                      </div>
+                    </div>
                   </div>
+                  {paymentError && <p className="text-destructive text-sm font-medium">{paymentError}</p>}
                 </div>
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={resetBooking} disabled={bookingLoading}>Cancel</Button>
-                <Button onClick={confirmBooking} disabled={bookingLoading}>
-                  {bookingLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Booking...
-                    </span>
-                  ) : (
-                    "Confirm Booking"
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 className="w-8 h-8 text-success" />
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Booking Confirmed!</h3>
-              <p className="text-muted-foreground mb-1">Your session with {tutorName} is scheduled for</p>
-              {selectedDate && selectedSlot && (
-                <p className="font-semibold text-foreground">
-                  {format(selectedDate, "EEEE, MMMM d")} at {selectedSlot.label}
-                </p>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); }} disabled={paymentProcessing}>Cancel</Button>
+                  <Button onClick={handlePayment} disabled={paymentProcessing} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    {paymentProcessing ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                        Processing Payment...
+                      </span>
+                    ) : `Pay ${currencySymbol}${introFee}`}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ━━━ CONTACT DETAILS POPUP ━━━ */}
+      {!hideTutorActions && (
+        <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Phone className="w-5 h-5 text-primary" />
+                {tutorName}'s Contact Details
+              </DialogTitle>
+              <DialogDescription>
+                Use these details to arrange your class directly with the tutor. You can discuss timing, fee, and class format with them.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-4">
+              {tutorEmail && (
+                <a href={`mailto:${tutorEmail}`} className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Mail className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="font-medium text-foreground text-sm truncate">{tutorEmail}</p>
+                  </div>
+                </a>
               )}
-              <Button className="mt-6" onClick={resetBooking}>Done</Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
-      {/* ━━━ REAL Stripe Payment Modal ━━━ */}
-      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); } }}>
-        <DialogContent className="sm:max-w-md">
-          {paymentSuccess ? (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 className="w-8 h-8 text-success" />
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Profile Unlocked!</h3>
-              <p className="text-muted-foreground">You now have full access to this tutor's profile and booking calendar.</p>
+              {tutorPhone && (
+                <a href={`tel:+${tutor.country?.calling_code || ""}${tutor.phone || ""}`} className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Phone className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Phone / WhatsApp</p>
+                    <p className="font-medium text-foreground text-sm">{tutorPhone}</p>
+                  </div>
+                </a>
+              )}
+
+              {!tutorEmail && !tutorPhone && (
+                <div className="text-center py-6 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                  Contact details not available for this tutor.
+                </div>
+              )}
             </div>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  Unlock Profile
-                </DialogTitle>
-                <DialogDescription>
-                  Pay a one-time fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to unlock {tutorName}'s full profile and booking calendar.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                  <p className="text-sm text-muted-foreground">Amount to pay</p>
-                  <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowContactModal(false)} className="w-full">
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ━━━ DISPUTE + RATING MODAL (WITH TABS) ━━━ */}
+      {!hideTutorActions && (
+        <Dialog open={showDisputeModal} onOpenChange={(open) => { if (!open) handleCloseDisputeModal(); }}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+
+            {/* Tab Header */}
+            <div className="flex border-b border-border mb-4 -mx-6 px-6 sticky top-0 bg-background z-10">
+              <button
+                type="button"
+                onClick={() => setActiveTab("dispute")}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                  activeTab === "dispute"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <AlertCircle className="w-4 h-4" />
+                {hasDispute ? "View Dispute" : "Submit Dispute"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("rating")}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                  activeTab === "rating"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Star className="w-4 h-4" />
+                {existingReview ? "Your Rating" : "Rate Tutor"}
+              </button>
+            </div>
+
+            {/* MODE 1: New dispute form */}
+            {activeTab === "dispute" && !hasDispute && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-destructive" />
+                    Open Dispute Against {tutorName}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Submit a dispute if you've had a problem with this tutor. Our team will review your complaint.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+
+                  {/* ✨ NEW: Rating required warning — only shows if no rating yet */}
+                  {!existingReview && (
+                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3">
+                      <p className="text-xs text-red-800 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                        <span>
+                          <strong>Rating required:</strong> You must rate this tutor before submitting a dispute.{" "}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("rating")}
+                            className="underline font-semibold hover:text-red-900"
+                          >
+                            Click here to rate now →
+                          </button>
+                        </span>
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Info box */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-xs text-amber-800">
+                      ⚠️ <strong>Note:</strong> Our admin team will review your dispute and contact the tutor to resolve the issue.
+                    </p>
+                  </div>
+
+                  {/* Reason dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Reason <span className="text-destructive">*</span>
+                    </label>
+                    <Select value={disputeReason} onValueChange={setDisputeReason}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a reason for the dispute" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DISPUTE_REASONS.map((r) => (
+                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Description textarea */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Description <span className="text-destructive">*</span>
+                    </label>
+                    <textarea
+                      className="w-full min-h-[120px] p-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="Please describe your issue in detail (minimum 10 characters)..."
+                      value={disputeDescription}
+                      onChange={(e) => setDisputeDescription(e.target.value)}
+                      maxLength={5000}
+                      disabled={disputeSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {disputeDescription.length} / 5000 characters
+                    </p>
+                  </div>
+
+                  {disputeFormError && (
+                    <p className="text-destructive text-sm font-medium flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      {disputeFormError}
+                    </p>
+                  )}
                 </div>
 
-                {/* Stripe Test Mode Indicator */}
-                {stripeKey && stripeKey.startsWith("pk_test") && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                    <p className="text-xs font-medium text-amber-700">🧪 Stripe Test Mode — No real charges</p>
-                    <p className="text-xs text-amber-600 mt-1">Use card: 4242 4242 4242 4242, any future date, any CVC</p>
-                  </div>
-                )}
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={handleCloseDisputeModal} disabled={disputeSubmitting}>
+                    Cancel
+                  </Button>
+                  {/* ✨ NEW: Submit button disabled if no rating */}
+                  <Button
+                    onClick={handleSubmitDispute}
+                    disabled={disputeSubmitting || !existingReview}
+                    variant="destructive"
+                  >
+                    {disputeSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-1.5" />
+                        Submit Dispute
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Name on Card</label>
-                    <Input placeholder="John Doe" value={cardName} onChange={(e) => setCardName(e.target.value)} disabled={paymentProcessing} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Card Number</label>
-                    <Input placeholder="4242 4242 4242 4242" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim())} maxLength={19} disabled={paymentProcessing} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Expiry MM/YY</label>
-                      <Input placeholder="12/28" value={cardExpiry} onChange={(e) => { let v = e.target.value.replace(/\D/g, "").slice(0, 4); if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2); setCardExpiry(v); }} maxLength={5} disabled={paymentProcessing} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">CVC</label>
-                      <Input placeholder="123" value={cardCvc} onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} disabled={paymentProcessing} />
-                    </div>
-                  </div>
-                </div>
-                {paymentError && <p className="text-destructive text-sm font-medium">{paymentError}</p>}
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); }} disabled={paymentProcessing}>Cancel</Button>
-                <Button onClick={handlePayment} disabled={paymentProcessing} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  {paymentProcessing ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                      Processing Payment...
+            {/* MODE 2: View existing dispute + chat */}
+            {activeTab === "dispute" && hasDispute && existingDispute && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 flex-wrap">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Dispute Details
+                    <span className={`text-xs px-2 py-1 rounded border ${getDisputeStatusColor(existingDispute.status)}`}>
+                      {getDisputeStatusIcon(existingDispute.status)} {getDisputeStatusLabel(existingDispute.status)}
                     </span>
-                  ) : `Pay ${currencySymbol}${introFee}`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+                  </DialogTitle>
+                  <DialogDescription>
+                    Ticket No: <span className="font-mono font-semibold text-foreground">{existingDispute.ticket_no}</span>
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+
+                  {existingDispute.status === 3 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-green-800 mb-1">
+                        ✅ Dispute Resolved — Refund Issued
+                      </p>
+                      <p className="text-xs text-green-700">
+                        A refund of {currencySymbol}{existingDispute.refund_amount} has been processed.
+                        It will appear in your account within 5-10 business days.
+                      </p>
+                    </div>
+                  )}
+
+                  {existingDispute.status === 2 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-red-800 mb-1">
+                        ❌ Dispute Closed — No Refund
+                      </p>
+                      <p className="text-xs text-red-700">
+                        After review, no refund was issued for this dispute.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Reason:</span>
+                      <span className="ml-2 font-medium text-foreground">
+                        {DISPUTE_REASONS.find(r => r.value === existingDispute.reason)?.label || existingDispute.reason}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Submitted:</span>
+                      <span className="ml-2 text-foreground">
+                        {existingDispute.created_at ? format(new Date(existingDispute.created_at), "PPp") : "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4" />
+                      Discussion
+                    </h4>
+
+                    {disputeLoadingDetails ? (
+                      <div className="text-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                        <p className="text-xs text-muted-foreground mt-2">Loading messages...</p>
+                      </div>
+                    ) : disputeMessages.length === 0 ? (
+                      <p className="text-center py-4 text-xs text-muted-foreground">No messages yet.</p>
+                    ) : (
+                      <div className="space-y-3 max-h-80 overflow-y-auto p-3 bg-muted/20 rounded-lg border border-border">
+                        {disputeMessages.map((msg) => {
+                          const isCurrentUser = msg.user?.id === currentUserId;
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
+                            >
+                              <div
+                                className={`max-w-[80%] rounded-lg p-3 ${
+                                  isCurrentUser
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background border border-border"
+                                }`}
+                              >
+                                <div className="text-xs font-semibold mb-1 opacity-80">
+                                  {msg.user?.name || "Unknown"}
+                                  {msg.user?.role && msg.user.role !== "student" && (
+                                    <span className="ml-1 px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded text-[10px]">
+                                      {msg.user.role.toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap">{msg.comment}</p>
+                                {msg.file && (
+                                  <a
+                                    href={msg.file}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 mt-2 text-xs underline opacity-90"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    View attached PDF
+                                  </a>
+                                )}
+                                <div className="text-[10px] mt-1 opacity-60">
+                                  {msg.created_at ? format(new Date(msg.created_at), "PPp") : ""}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {isDisputeOpen && (
+                    <div className="border-t pt-4">
+                      <label className="block text-sm font-medium text-foreground mb-1.5">
+                        Send a message
+                      </label>
+                      <div className="flex gap-2">
+                        <textarea
+                          className="flex-1 min-h-[60px] p-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                          placeholder="Type your message..."
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          maxLength={5000}
+                          disabled={sendingMessage}
+                        />
+                        <Button
+                          onClick={handleSendMessage}
+                          disabled={sendingMessage || !newMessage.trim()}
+                          size="sm"
+                        >
+                          {sendingMessage ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isDisputeOpen && (
+                    <div className="text-center py-3 text-xs text-muted-foreground border-t">
+                      <em>This dispute is {existingDispute.status === 2 ? "closed" : "resolved"}. No more messages can be sent.</em>
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={handleCloseDisputeModal} className="w-full">
+                    Close
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+
+            {/* RATING TAB CONTENT */}
+            {activeTab === "rating" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Star className="w-5 h-5 text-yellow-500" />
+                    {existingReview && !editingRating ? "Your Rating" : "Rate This Tutor"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {existingReview && !editingRating
+                      ? "You have already rated this tutor. You can edit your rating anytime."
+                      : `Share your experience with ${tutorName}. Your rating helps other students.`}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+
+                  {reviewLoading ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                      <p className="text-xs text-muted-foreground mt-2">Loading your review...</p>
+                    </div>
+                  ) : existingReview && !editingRating ? (
+                    <div className="space-y-4">
+                      <div className="bg-muted/30 rounded-lg p-4">
+                        <div className="flex items-center gap-1 mb-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-6 h-6 ${
+                                star <= existingReview.rate
+                                  ? "text-yellow-400 fill-yellow-400"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-2 text-sm font-semibold text-foreground">
+                            {existingReview.rate} / 5
+                          </span>
+                        </div>
+                        {existingReview.comment && (
+                          <p className="text-sm text-foreground italic">"{existingReview.comment}"</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Submitted: {existingReview.created_at ? format(new Date(existingReview.created_at), "PPp") : "—"}
+                          {existingReview.updated_at && existingReview.created_at !== existingReview.updated_at && (
+                            <span> · Edited: {format(new Date(existingReview.updated_at), "PPp")}</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <Button
+                        onClick={() => setEditingRating(true)}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-1.5" />
+                        Edit Rating
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Your Rating <span className="text-destructive">*</span>
+                        </label>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setRatingValue(star)}
+                              onMouseEnter={() => setRatingHover(star)}
+                              onMouseLeave={() => setRatingHover(0)}
+                              disabled={ratingSubmitting}
+                              className="transition-transform hover:scale-110 disabled:cursor-not-allowed"
+                            >
+                              <Star
+                                className={`w-10 h-10 ${
+                                  star <= (ratingHover || ratingValue)
+                                    ? "text-yellow-400 fill-yellow-400"
+                                    : "text-gray-300"
+                                } transition-colors`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        {ratingValue > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {ratingValue === 1 && "Poor"}
+                            {ratingValue === 2 && "Fair"}
+                            {ratingValue === 3 && "Good"}
+                            {ratingValue === 4 && "Very Good"}
+                            {ratingValue === 5 && "Excellent"}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">
+                          Comment <span className="text-muted-foreground">(optional)</span>
+                        </label>
+                        <textarea
+                          className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          placeholder="Share your experience with this tutor..."
+                          value={ratingComment}
+                          onChange={(e) => setRatingComment(e.target.value)}
+                          maxLength={5000}
+                          disabled={ratingSubmitting}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {ratingComment.length} / 5000 characters
+                        </p>
+                      </div>
+
+                      {ratingFormError && (
+                        <p className="text-destructive text-sm font-medium flex items-center gap-1">
+                          <AlertCircle className="w-4 h-4" />
+                          {ratingFormError}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <DialogFooter className="gap-2 sm:gap-0">
+                  {existingReview && editingRating ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingRating(false);
+                          setRatingValue(existingReview.rate);
+                          setRatingComment(existingReview.comment || "");
+                          setRatingFormError("");
+                        }}
+                        disabled={ratingSubmitting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleSubmitRating}
+                        disabled={ratingSubmitting || ratingValue < 1}
+                      >
+                        {ratingSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-1.5" />
+                            Update Rating
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  ) : existingReview && !editingRating ? (
+                    <Button variant="outline" onClick={handleCloseDisputeModal} className="w-full">
+                      Close
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" onClick={handleCloseDisputeModal} disabled={ratingSubmitting}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSubmitRating} disabled={ratingSubmitting || ratingValue < 1}>
+                        {ratingSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-1.5" />
+                            Submit Rating
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </DialogFooter>
+              </>
+            )}
+
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

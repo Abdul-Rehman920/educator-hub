@@ -477,6 +477,7 @@ export function ProfileSetup({
           facebook: facebook,
           twitter: twitter,
           linkedin: linkedin,
+          timezone: scheduleTimezone,  // ✅ ADDED — IANA format like "Asia/Karachi"
           // FIX: Send uploaded image path so backend saves it to profile
           ...(uploadedImagePath ? { profile_img: uploadedImagePath } : {}),
         }),
@@ -543,7 +544,10 @@ export function ProfileSetup({
         const scheduleRes = await fetch(`${API_BASE}/teacher/store-schedule`, {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ data: scheduleData }),
+          body: JSON.stringify({
+            data: scheduleData,
+            timezone: scheduleTimezone,  // ✅ ADDED
+          }),
         });
         const scheduleResult = await scheduleRes.json().catch(() => null);
         console.log("Schedule save response:", scheduleRes.status, scheduleResult);

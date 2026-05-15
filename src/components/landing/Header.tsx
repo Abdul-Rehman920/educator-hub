@@ -20,7 +20,19 @@ export function Header() {
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+  
+    // Safely parse user from localStorage
+    let user: any = {};
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr && userStr !== "undefined" && userStr !== "null") {
+        user = JSON.parse(userStr);
+      }
+    } catch (e) {
+      console.error("Failed to parse user data from localStorage:", e);
+      localStorage.removeItem("user"); // Clean corrupt data
+    }
+  
     if (token) {
       setIsLoggedIn(true);
       const role = user?.role?.[0]?.name || null;

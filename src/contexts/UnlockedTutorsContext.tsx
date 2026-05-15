@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-const API_BASE = "http://127.0.0.1:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("auth_token");
@@ -50,7 +50,7 @@ export function UnlockedTutorsProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       // Backend returns array of tutor ids or objects
       const ids: number[] = (data?.unlocked_tutors || data?.data || []).map(
-        (item: any) => Number(item?.tutor_id || item?.id || item)
+        (item: any) => Number(item?.teacher_id || item?.tutor_id || item?.id || item)
       );
       setUnlockedTutorIds(new Set(ids));
     } catch {

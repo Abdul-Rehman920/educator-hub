@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const API = "http://127.0.0.1:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
 
 /* ─── Helpers ─── */
 function headers() {
@@ -265,7 +265,7 @@ export default function DashboardBookingDetail() {
 
         // Fetch payment status & existing review
         fetchPaymentStatus(rawBooking.booking_reference);
-        fetchExistingReview(rawBooking.booking_reference, rawBooking.student?.id);
+        fetchExistingReview(rawBooking.booking_reference, rawBooking.student?.id, rawBooking.appointment_date);
 
         setLoading(false);
         return;
@@ -303,7 +303,7 @@ export default function DashboardBookingDetail() {
               setBooking(bookingData);
               setLocalStatus(bookingData.status || "pending");
               fetchPaymentStatus(bookingData.booking_reference);
-              fetchExistingReview(bookingData.booking_reference, bookingData.student?.id);
+              fetchExistingReview(bookingData.booking_reference, bookingData.student?.id, bookingData.appointment_date);
               setLoading(false);
               return;
             }
@@ -333,7 +333,7 @@ export default function DashboardBookingDetail() {
               setBooking(found);
               setLocalStatus(found.status || "pending");
               fetchPaymentStatus(found.booking_reference);
-              fetchExistingReview(found.booking_reference, found.student?.id);
+              fetchExistingReview(found.booking_reference, found.student?.id, found.appointment_date);
               setLoading(false);
               return;
             }
@@ -346,130 +346,205 @@ export default function DashboardBookingDetail() {
 
     /* ── Check if student has paid ── */
     async function fetchPaymentStatus(bookingRef: string | number) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+      console.log("[fetchPaymentStatus] Checking payment for booking:", bookingRef);
+
       try {
-        const teacherId = getTeacherId();
         const res = await fetch(
-          `${API}/booking/get/plans?booking_reference=${bookingRef}`,
+          `${BASE_URL}/booking/get/plans?booking_reference=${bookingRef}`,
           { headers: headers() }
         );
+        console.log("[fetchPaymentStatus] Plans response status:", res.status);
+
         if (res.ok) {
           const json = await res.json();
-          const planList = Array.isArray(json) ? json : (json?.data?.plans || json?.data || json?.plans || []);
-          if (planList.length > 0) {
-            const allPaid = planList.every((p: any) => p.paid_at || p.is_paid === "YES");
-            setPaymentPaid(allPaid);
-          }
-        }
-      } catch {}
+          console.log("[fetchPaymentStatus] Plans raw JSON:", json);
 
-      // Also try booking/detail for payment info
-      try {
-        const teacherId = getTeacherId();
-        if (teacherId && bookingRef) {
-          const res = await fetch(
-            `${API}/booking/detail?booking_reference=${bookingRef}&teacher_id=${teacherId}&student_id=0`,
-            { headers: headers() }
-          );
-          if (res.ok) {
-            const json = await res.json();
-            if (json?.payments?.paid && Array.isArray(json.payments.paid) && json.payments.paid.length > 0) {
+          const planList = Array.isArray(json)
+            ? json
+            : (json?.data?.plans || json?.data || json?.plans || []);
+          console.log("[fetchPaymentStatus] Plan list:", planList);
+
+          if (planList.length > 0) {
+            const allPaid = planList.every((p: any) =>
+              p.paid_at ||
+              p.is_paid === "YES" ||
+              p.is_paid === "yes" ||
+              p.is_paid === true ||
+              p.is_paid === 1 ||
+              p.status === "paid"
+            );
+            console.log("[fetchPaymentStatus] All paid?", allPaid);
+
+            if (allPaid) {
               setPaymentPaid(true);
+              console.log("[fetchPaymentStatus] Payment status set to PAID");
+              return;
             }
           }
         }
-      } catch {}
-    }
+      } catch (err) {
+        console.error("[fetchPaymentStatus] Plans endpoint error:", err);
+      }
 
+      console.log("[fetchPaymentStatus] Payment not confirmed");
+    }
+    
     /* ── Fetch existing review by tutor ── */
-    async function fetchExistingReview(bookingRef: string | number, studentId?: number) {
+    async function fetchExistingReview(bookingRef: string | number, studentId?: number, appointmentDate?: string) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
       const userId = getTeacherId();
+      console.log("[fetchExistingReview] Start - bookingRef:", bookingRef, "studentId:", studentId, "userId:", userId);
+
       if (!userId || !bookingRef) return;
 
       let sid = studentId || 0;
 
-      // If no student_id, try to find it from booking sessions
+      // If no student_id, try to find it from sessions endpoint
       if (!sid) {
-        try {
-          const sRes = await fetch(`${API}/booking/sessions?month=${new Date().getMonth() + 1}`, { headers: headers() });
-          if (sRes.ok) {
-            const sJson = await sRes.json();
-            const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
-            const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
-            if (match?.student?.id) sid = match.student.id;
-          }
-        } catch {}
+        // Try with appointment_date first (most accurate)
+        if (appointmentDate) {
+          try {
+            const sRes = await fetch(`${BASE_URL}/booking/sessions?date=${appointmentDate}`, { headers: headers() });
+            if (sRes.ok) {
+              const sJson = await sRes.json();
+              const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
+              const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
+              if (match?.student?.id) sid = match.student.id;
+            }
+          } catch {}
+        }
+        // Fallback: try by month
+        if (!sid) {
+          try {
+            const sRes = await fetch(`${BASE_URL}/booking/sessions?month=${new Date().getMonth() + 1}`, { headers: headers() });
+            if (sRes.ok) {
+              const sJson = await sRes.json();
+              const all = Array.isArray(sJson) ? sJson : sJson?.data || [];
+              const match = all.find((s: any) => String(s.booking_reference) === String(bookingRef));
+              if (match?.student?.id) sid = match.student.id;
+            }
+          } catch {}
+        }
       }
 
-      // Call booking/detail with all 3 required params
+      console.log("[fetchExistingReview] Final student_id:", sid);
+      if (!sid) {
+        console.log("[fetchExistingReview] No student_id found, exiting");
+        return;
+      }
+
+      // Call booking/detail with valid student_id
       try {
-        const res = await fetch(
-          `${API}/booking/detail?booking_reference=${bookingRef}&teacher_id=${userId}&student_id=${sid}`,
-          { headers: headers() }
-        );
+        const url = `${BASE_URL}/booking/detail?booking_reference=${bookingRef}&teacher_id=${userId}&student_id=${sid}`;
+        console.log("[fetchExistingReview] Fetching:", url);
+
+        const res = await fetch(url, { headers: headers() });
+        console.log("[fetchExistingReview] Status:", res.status);
+
         if (res.ok) {
           const json = await res.json();
+          console.log("[fetchExistingReview] Response JSON:", json);
 
-          // Collect reviews from all possible paths
           const allReviews: any[] = [];
           if (Array.isArray(json?.reviews)) allReviews.push(...json.reviews);
           if (Array.isArray(json?.teacher?.reviews)) allReviews.push(...json.teacher.reviews);
+          if (Array.isArray(json?.student?.reviews)) allReviews.push(...json.student.reviews);
+          if (Array.isArray(json?.booking_reviews)) allReviews.push(...json.booking_reviews);
+          if (Array.isArray(json?.data?.reviews)) allReviews.push(...json.data.reviews);
 
-          // Find review by this tutor (reviewed_by.id === tutor's userId)
+          console.log("[fetchExistingReview] All reviews:", allReviews);
+
           const myReview = allReviews.find(
             (r: any) =>
-              String(r.reviewed_by?.id) === String(userId) &&
+              String(r.reviewed_by?.id || r.user_id || r.reviewer_id) === String(userId) &&
               String(r.booking_reference) === String(bookingRef)
           );
 
+          console.log("[fetchExistingReview] My review:", myReview);
+
           if (myReview) {
             setExistingReview({
-              rate: myReview.rate || 0,
-              comment: myReview.comment || "",
+              rate: myReview.rate || myReview.rating || 0,
+              comment: myReview.comment || myReview.review || "",
             });
             setReviewSubmitted(true);
-            return;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error("[fetchExistingReview] Error:", err);
+      }
     }
-
     if (id) loadBooking();
   }, [id, location.state]);
 
   /* ── Confirm / Reject actions ── */
-  const handleAction = async (action: "confirm" | "reject") => {
-    if (!booking) return;
+const handleAction = async (action: "confirm" | "reject") => {
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    
+    console.log("[handleAction] Called with action:", action);
+    console.log("[handleAction] Booking:", booking);
+    console.log("[handleAction] BASE_URL:", BASE_URL);
+
+    if (!booking) {
+      toast({ title: "Error", description: "Booking data not loaded.", variant: "destructive" });
+      return;
+    }
+
+    if (!booking.booking_reference) {
+      toast({ title: "Error", description: "Booking reference missing.", variant: "destructive" });
+      return;
+    }
+
     setActionLoading(true);
 
     const statusCode = action === "confirm" ? 2 : 3;
     const bookingRef = booking.booking_reference;
+    const url = `${BASE_URL}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`;
+    console.log("[handleAction] Fetching:", url);
 
     try {
-      const res = await fetch(
-        `${API}/booking/change/status?booking_reference=${bookingRef}&status=${statusCode}`,
-        { headers: headers() }
-      );
-      const data = await res.json();
+      const res = await fetch(url, { headers: headers() });
+      console.log("[handleAction] Status:", res.status);
 
-      if (res.ok && data?.success !== false && !data?.errors) {
+      const text = await res.text();
+      console.log("[handleAction] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+
+      const isSuccess = res.ok && !data?.errors && data?.success !== false;
+
+      if (isSuccess) {
         const newStatus = action === "confirm" ? "confirmed" : "rejected";
         setLocalStatus(newStatus);
+        setBooking((prev: any) => prev ? { ...prev, status: newStatus } : prev);
         toast({
           title: action === "confirm" ? "Booking Confirmed" : "Booking Rejected",
           description:
             action === "confirm"
-              ? `Session with ${booking.student?.name} has been confirmed.`
-              : `Session with ${booking.student?.name} has been rejected.`,
+              ? `Session with ${booking.student?.name || "student"} has been confirmed.`
+              : `Session with ${booking.student?.name || "student"} has been rejected.`,
           variant: action === "confirm" ? "default" : "destructive",
         });
       } else {
         const errorMsg = data?.errors
           ? Object.values(data.errors).flat().join(", ")
-          : data?.message || `Could not ${action} booking.`;
+          : data?.message || `Could not ${action} booking (HTTP ${res.status}).`;
+        console.error("[handleAction] API error:", errorMsg);
         toast({ title: "Error", description: errorMsg, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: `Could not ${action} booking. Please try again.`, variant: "destructive" });
+    } catch (err: any) {
+      console.error("[handleAction] Exception:", err);
+      toast({
+        title: "Error",
+        description: `Network error: ${err?.message || "Could not reach server"}.`,
+        variant: "destructive",
+      });
     } finally {
       setActionLoading(false);
     }
@@ -477,39 +552,78 @@ export default function DashboardBookingDetail() {
 
   /* ── Cancel Class ── */
   const handleCancelClass = async () => {
-    if (!booking) return;
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    console.log("[handleCancelClass] Called");
+
+    if (!booking) {
+      console.error("[handleCancelClass] No booking");
+      return;
+    }
+
     const confirmed = window.confirm("Are you sure you want to cancel this class? The student will be notified.");
     if (!confirmed) return;
 
     setCancelLoading(true);
+
     try {
       const sessionId = booking.session_id || booking.id;
-      const res = await fetch(`${API}/booking/cancel/classes?ids[]=${sessionId}`, { headers: headers() });
-      const data = await res.json();
+      const url = `${BASE_URL}/booking/cancel/classes?ids[]=${sessionId}`;
+      console.log("[handleCancelClass] Fetching:", url);
 
-      if (res.ok) {
-        setLocalStatus("cancelled");
-        toast({ title: "Class Cancelled", description: "The class has been cancelled. The student has been notified." });
-      } else {
-        toast({ title: "Error", description: data?.message || "Failed to cancel class.", variant: "destructive" });
+      const res = await fetch(url, { headers: headers() });
+      console.log("[handleCancelClass] Status:", res.status);
+
+      const text = await res.text();
+      console.log("[handleCancelClass] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to cancel class. Please try again.", variant: "destructive" });
+
+      const isSuccess = res.ok && !data?.errors;
+
+      if (isSuccess) {
+        setLocalStatus("cancelled");
+        setBooking((prev: any) => prev ? { ...prev, status: "cancelled" } : prev);
+        toast({ title: "Class Cancelled", description: "The class has been cancelled. The student has been notified." });
+        console.log("[handleCancelClass] Success");
+      } else {
+        const errMsg = data?.errors
+          ? Object.values(data.errors).flat().join(", ")
+          : data?.message || `Failed to cancel class (HTTP ${res.status}).`;
+        console.error("[handleCancelClass] Error:", errMsg);
+        toast({ title: "Error", description: errMsg, variant: "destructive" });
+      }
+    } catch (err: any) {
+      console.error("[handleCancelClass] Exception:", err);
+      toast({ title: "Error", description: `Network error: ${err?.message || "Could not cancel class"}.`, variant: "destructive" });
     } finally {
       setCancelLoading(false);
     }
   };
-
   /* ── Submit Review ── */
   const handleSubmitReview = async () => {
-    if (!booking) return;
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://educator-hub.com/api";
+    console.log("[handleSubmitReview] Called");
+
+    if (!booking) {
+      console.error("[handleSubmitReview] No booking");
+      return;
+    }
     if (reviewRating === 0) {
       toast({ title: "Rating Required", description: "Please select a star rating before submitting.", variant: "destructive" });
       return;
     }
+
     setSubmittingReview(true);
+    const url = `${BASE_URL}/booking/review/store`;
+    console.log("[handleSubmitReview] URL:", url);
+
     try {
-      const res = await fetch(`${API}/booking/review/store`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({
@@ -518,18 +632,37 @@ export default function DashboardBookingDetail() {
           comment: reviewComment || undefined,
         }),
       });
-      const data = await res.json();
-      if (res.ok && (data?.data || data?.success)) {
+      console.log("[handleSubmitReview] Status:", res.status);
+
+      const text = await res.text();
+      console.log("[handleSubmitReview] Response text:", text);
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+
+      // Success: HTTP 2xx AND no errors field
+      const isSuccess = res.ok && !data?.errors;
+
+      if (isSuccess) {
         toast({ title: "Review Submitted!", description: "Thank you for your feedback." });
         setReviewSubmitted(true);
         setExistingReview({ rate: reviewRating, comment: reviewComment });
         setLocalStatus("completed");
+        console.log("[handleSubmitReview] Success");
       } else {
-        const errMsg = data?.message || data?.errors?.message || "Failed to submit review.";
+        const errMsg = data?.errors
+          ? Object.values(data.errors).flat().join(", ")
+          : data?.message || `Failed to submit review (HTTP ${res.status}).`;
+        console.error("[handleSubmitReview] Error:", errMsg);
         toast({ title: "Error", description: errMsg, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to submit review.", variant: "destructive" });
+    } catch (err: any) {
+      console.error("[handleSubmitReview] Exception:", err);
+      toast({ title: "Error", description: `Network error: ${err?.message || "Could not submit review"}.`, variant: "destructive" });
     } finally {
       setSubmittingReview(false);
     }
