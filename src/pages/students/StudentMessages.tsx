@@ -1,3 +1,4 @@
+import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { StudentDashboardLayout } from "@/components/student-dashboard/StudentDashboardLayout";
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { OnlineAvatar } from "@/components/chat/OnlineAvatar";
 
 // ─── API Config ────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
 
 function getAuthHeaders() {
   const token = localStorage.getItem("auth_token");
@@ -116,10 +117,13 @@ export default function StudentMessages() {
   const [searchParams] = useSearchParams();
   const tutorIdParam = searchParams.get("tutor");
   const isMobile = useIsMobile();
+  const { isTutorUnlocked } = useUnlockedTutors();
 
   // State
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeChat, setActiveChat] = useState<number | null>(null);
+  // ✨ NEW: Tutor info fetched separately (for new chats started from tutor profile)
+  const [pendingTutor, setPendingTutor] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [loadingContacts, setLoadingContacts] = useState(true);
@@ -172,13 +176,40 @@ export default function StudentMessages() {
     loadContacts();
   }, [loadContacts]);
 
-  // ─── Handle tutor query param ───
+  // ─── ✨ UPDATED: Handle tutor query param + fetch tutor info if not in contacts ───
   useEffect(() => {
-    if (tutorIdParam) {
-      const id = parseInt(tutorIdParam);
-      setActiveChat(id);
+    if (!tutorIdParam) return;
+
+    const id = parseInt(tutorIdParam);
+    setActiveChat(id);
+
+    // If tutor not in contacts list yet (no chat history), fetch tutor info separately
+    const existsInContacts = contacts.some((c) => c.id === id);
+    if (!existsInContacts && id) {
+      const fetchTutorInfo = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/teacher?user_id=${id}`, {
+            headers: getAuthHeaders(),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const t = json?.data || json;
+            if (t?.id) {
+              setPendingTutor({
+                id: t.id,
+                name: `${t.name || ""} ${t.last_name || ""}`.trim(),
+                profile_img: t.profile?.profile_img || null,
+                last_message: null,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch tutor info:", err);
+        }
+      };
+      fetchTutorInfo();
     }
-  }, [tutorIdParam]);
+  }, [tutorIdParam, contacts]);
 
   // ─── Load Messages when active chat changes ───
   const loadMessages = useCallback(async (contactId: number) => {
@@ -332,7 +363,10 @@ export default function StudentMessages() {
     }
   };
 
-  const activeContact = contacts.find((c) => c.id === activeChat);
+  // ─── ✨ UPDATED: Find active contact — first from contacts, fallback to pendingTutor (for new chats) ───
+  const activeContact =
+    contacts.find((c) => c.id === activeChat) ||
+    (pendingTutor && pendingTutor.id === activeChat ? pendingTutor : null);
 
   const formatTime = (dateStr: string) => {
     try {
@@ -360,37 +394,45 @@ export default function StudentMessages() {
             <p className="text-sm text-muted-foreground">No conversations yet</p>
           </div>
         ) : (
-          contacts.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveChat(c.id)}
-              className={cn(
-                "flex items-center gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-muted/50",
-                activeChat === c.id && "bg-muted"
-              )}
-            >
-              <OnlineAvatar
-                src={c.profile_img || ""}
-                name={c.name}
-                online={false}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sm text-foreground truncate">
-                    {c.name}
-                  </span>
+          contacts.map((c) => {
+            const isUnlocked = isTutorUnlocked(c.id);
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveChat(c.id)}
+                className={cn(
+                  "flex items-center gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-muted/50",
+                  activeChat === c.id && "bg-muted"
+                )}
+              >
+                <div className={cn(!isUnlocked && "blur-sm select-none pointer-events-none")}>
+                  <OnlineAvatar
+                    src={c.profile_img || ""}
+                    name={c.name}
+                    online={false}
+                  />
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                  {c.last_message || "No messages yet"}
-                </p>
-              </div>
-              {c.unseen_count && c.unseen_count > 0 ? (
-                <Badge className="bg-primary text-primary-foreground text-[10px] h-5 min-w-5 flex items-center justify-center rounded-full px-1.5">
-                  {c.unseen_count}
-                </Badge>
-              ) : null}
-            </button>
-          ))
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className={cn(
+                      "font-semibold text-sm text-foreground truncate",
+                      !isUnlocked && "blur-sm select-none"
+                    )}>
+                      {c.name}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {c.last_message || "No messages yet"}
+                  </p>
+                </div>
+                {c.unseen_count && c.unseen_count > 0 ? (
+                  <Badge className="bg-primary text-primary-foreground text-[10px] h-5 min-w-5 flex items-center justify-center rounded-full px-1.5">
+                    {c.unseen_count}
+                  </Badge>
+                ) : null}
+              </button>
+            );
+          })
         )}
       </ScrollArea>
     </div>
@@ -425,14 +467,21 @@ export default function StudentMessages() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
-        <OnlineAvatar
-          src={activeContact?.profile_img || ""}
-          name={activeContact?.name || "User"}
-          size="sm"
-          online={false}
-        />
+        <div className={cn(
+          activeChat !== null && !isTutorUnlocked(activeChat) && "blur-sm select-none pointer-events-none"
+        )}>
+          <OnlineAvatar
+            src={activeContact?.profile_img || ""}
+            name={activeContact?.name || "User"}
+            size="sm"
+            online={false}
+          />
+        </div>
         <div className="min-w-0">
-          <p className="font-semibold text-sm text-foreground truncate">
+          <p className={cn(
+            "font-semibold text-sm text-foreground truncate",
+            activeChat !== null && !isTutorUnlocked(activeChat) && "blur-sm select-none"
+          )}>
             {activeContact?.name || "User"}
           </p>
         </div>

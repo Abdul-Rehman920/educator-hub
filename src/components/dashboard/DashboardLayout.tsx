@@ -12,7 +12,7 @@ import { TopBar } from "./TopBar";
 
 const navItems = [
   { label: "Dashboard", icon: Home, path: "/dashboard" },
-  { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
+  // { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
   { label: "Chat", icon: MessageSquare, path: "/dashboard/chat" },
   { label: "Profile", icon: User, path: "/dashboard/profile" },
   { label: "Change Password", icon: Lock, path: "/dashboard/change-password" },

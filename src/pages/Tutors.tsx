@@ -72,7 +72,8 @@ export default function TutorsPage() {
   // Filter values (store IDs for API, "" means "All")
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStandard, setSelectedStandard] = useState("all");
-  const [selectedSubject, setSelectedSubject] = useState("all");
+  // ✨ CHANGED: Subject is now multi-select (array of IDs)
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedCountry, setSelectedCountry] = useState("all");
   const [tuitionType, setTuitionType] = useState("all"); // all, single, group
@@ -155,7 +156,12 @@ export default function TutorsPage() {
       params.append("page", String(page));
 
       if (searchQuery.trim()) params.append("keyword", searchQuery.trim());
-      if (selectedSubject && selectedSubject !== "all") params.append("subjects", selectedSubject);
+      
+      // ✨ CHANGED: Multiple subjects sent as comma-separated
+      if (selectedSubjects.length > 0) {
+        params.append("subjects", selectedSubjects.join(","));
+      }
+      
       if (selectedStandard && selectedStandard !== "all") params.append("classes", selectedStandard);
       if (selectedLanguage && selectedLanguage !== "all") params.append("language[]", selectedLanguage);
       if (selectedCountry && selectedCountry !== "all") params.append("countries[]", selectedCountry);
@@ -170,7 +176,12 @@ export default function TutorsPage() {
       // Max rate
       if (maxRate[0] < 500) params.append("rate_per_hour", String(maxRate[0]));
 
-      const res = await api.get(`/teacher/listing?${params.toString()}`);
+      // ✨ Sort by — backend ko batao kaunsa sort chahiye
+      // "relevant" = backend smart ranking apply karega (logged-in students ke liye)
+      params.append("sort_by", sortBy);
+
+      const res = await api.get(`/teacher/listing?${params.toString()}`);      
+
       const json = res.data;
 
       const teachersData = json?.data || [];
@@ -205,20 +216,22 @@ export default function TutorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedSubject, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
+    // ✨ CHANGED: selectedSubject → selectedSubjects
+  }, [searchQuery, selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
 
   // When standard changes, refetch subjects for that standard
   useEffect(() => {
     fetchSubjectsForStandard(selectedStandard);
-    // Reset selected subject when standard changes (might not exist in new standard)
-    setSelectedSubject("all");
+    // ✨ CHANGED: Reset selected subjects (array) when standard changes
+    setSelectedSubjects([]);
   }, [selectedStandard]);  
   
   // Fetch on filter change (reset to page 1)
   useEffect(() => {
     setCurrentPage(1);
     fetchTutors(1);
-  }, [selectedSubject, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
+    // ✨ CHANGED: selectedSubject → selectedSubjects
+  }, [selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
 
   // Debounced search
   useEffect(() => {
@@ -260,7 +273,8 @@ export default function TutorsPage() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setSelectedSubject("all");
+    // ✨ CHANGED: Reset to empty array
+    setSelectedSubjects([]);
     setSelectedStandard("all");
     setSelectedLanguage("all");
     setSelectedCountry("all");
@@ -270,8 +284,9 @@ export default function TutorsPage() {
     setSortBy("relevant");
   };
 
+  // ✨ CHANGED: Check selectedSubjects.length instead of selectedSubject !== "all"
   const hasActiveFilters =
-    selectedSubject !== "all" ||
+    selectedSubjects.length > 0 ||
     selectedStandard !== "all" ||
     selectedLanguage !== "all" ||
     selectedCountry !== "all" ||
@@ -385,23 +400,76 @@ export default function TutorsPage() {
                       </Select>
                     </div>
 
-                    {/* Subject */}
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Subject</label>
-                      <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="All Subjects" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Subjects</SelectItem>
-                          {subjectsList.map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+{/* Subject — Dropdown with checkboxes inside */}
+<div>
+  <label className="block text-sm font-medium text-foreground mb-2">Subject</label>
+  <Select
+    value="placeholder"
+    onValueChange={() => {}}
+  >
+    <SelectTrigger>
+      <SelectValue>
+        {selectedSubjects.length === 0
+          ? "All Subjects"
+          : selectedSubjects.length === 1
+          ? subjectsList.find((s) => String(s.id) === selectedSubjects[0])?.name || "1 subject"
+          : `${selectedSubjects.length} subjects selected`}
+      </SelectValue>
+    </SelectTrigger>
+    <SelectContent className="max-h-72">
+      {/* Clear all option (only if something selected) */}
+      {selectedSubjects.length > 0 && (
+        <div
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setSelectedSubjects([]);
+          }}
+          className="px-2 py-2 mb-1 text-xs text-primary hover:bg-muted rounded cursor-pointer font-medium border-b border-border"
+        >
+          ✕ Clear all ({selectedSubjects.length})
+        </div>
+      )}
+
+      {/* Subjects list with checkboxes */}
+      {subjectsList.length === 0 ? (
+        <div className="px-2 py-3 text-xs text-muted-foreground">No subjects available</div>
+      ) : (
+        subjectsList.map((s) => {
+          const idStr = String(s.id);
+          const isChecked = selectedSubjects.includes(idStr);
+          return (
+            <div
+              key={s.id}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isChecked) {
+                  setSelectedSubjects(selectedSubjects.filter((id) => id !== idStr));
+                } else {
+                  setSelectedSubjects([...selectedSubjects, idStr]);
+                }
+              }}
+              className={`flex items-center gap-2 px-2 py-2 rounded cursor-pointer transition-colors ${
+                isChecked
+                  ? "bg-yellow-100 text-yellow-900 font-medium hover:bg-yellow-200"
+                  : "hover:bg-muted text-foreground"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                readOnly
+                className="w-4 h-4 rounded border-border accent-yellow-500 cursor-pointer pointer-events-none"
+              />
+              <span className="text-sm select-none flex-1">{s.name}</span>
+            </div>
+          );
+        })
+      )}
+    </SelectContent>
+  </Select>
+</div> 
 
                     {/* Language */}
                     <div>

@@ -13,7 +13,7 @@ import { TopBar } from "@/components/dashboard/TopBar";
 const navItems = [
   { label: "Dashboard", icon: Home, path: "/student" },
   { label: "Find Tutors", icon: Search, path: "/tutors" },
-  { label: "Calendar", icon: Calendar, path: "/student/calendar" },
+  // { label: "Calendar", icon: Calendar, path: "/student/calendar" },
   { label: "Messages", icon: MessageSquare, path: "/student/messages" },
   { label: "Profile", icon: User, path: "/student/profile" },
   { label: "Settings", icon: Settings, path: "/student/settings" },
