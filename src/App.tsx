@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Tutors from "./pages/Tutors";
 import TutorProfile from "./pages/TutorProfile";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
 import DashboardHome from "./pages/dashboard/DashboardHome";
@@ -41,6 +42,7 @@ const App = () => (
           <Route path="/tutors" element={<Tutors />} />
           <Route path="/tutors/:id" element={<TutorProfile />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/signup/:role" element={<SignUp />} />
 
           {/* Teacher Dashboard - Protected */}
