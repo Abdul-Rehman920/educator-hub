@@ -879,10 +879,17 @@ export default function TutorProfile() {
                           {tutor.subjects?.map((s) => s.name).join(" & ") || "General"}
                         </p>
                         {tutor.classes?.length > 0 && (
-                          <p className="text-muted-foreground text-sm mb-2 flex items-center gap-1.5">
-                            <GraduationCap className="w-4 h-4 text-primary" />
-                            {tutor.classes.map((c) => c.name).join(", ")}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                            <GraduationCap className="w-4 h-4 text-primary shrink-0" />
+                            {tutor.classes.map((c) => (
+                              <span
+                                key={c.id}
+                                className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                              >
+                                {c.name}
+                              </span>
+                           ))}
+                         </div>
                         )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1.5">
