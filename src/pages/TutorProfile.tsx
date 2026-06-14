@@ -172,6 +172,7 @@ type TutorData = {
   } | null;
   languages: { name: string }[];
   subjects: { name: string }[];
+  classes: { id: number; name: string }[];  // new addition of classes ( education standard)
   profile: {
     about_me: string;
     rate_per_hour: number;
@@ -877,6 +878,12 @@ export default function TutorProfile() {
                         <p className="text-primary font-semibold text-lg mb-3">
                           {tutor.subjects?.map((s) => s.name).join(" & ") || "General"}
                         </p>
+                        {tutor.classes?.length > 0 && (
+                          <p className="text-muted-foreground text-sm mb-2 flex items-center gap-1.5">
+                            <GraduationCap className="w-4 h-4 text-primary" />
+                            {tutor.classes.map((c) => c.name).join(", ")}
+                          </p>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             <Star className="w-4 h-4 text-accent fill-accent" />
