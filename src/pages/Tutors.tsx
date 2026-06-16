@@ -697,7 +697,9 @@ export default function TutorsPage() {
                                   </div>
                                 </div>
 
-                                <p className="text-muted-foreground mb-4 line-clamp-2">{tutor.intro}</p>
+                                <p className="text-muted-foreground mb-4 line-clamp-2">
+                                  {maskNameInText(tutor.intro, tutor.firstName, tutor.last_name, isLocked)}
+                                </p>
 
                                 <div className="flex flex-wrap gap-2 mb-4">
                                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">
