@@ -59,6 +59,27 @@ function formatTime12h(time24: string): string {
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+function maskNameInText(
+  text: string | null | undefined,
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  shouldMask: boolean
+): string {
+  if (!text) return "No description available.";
+  if (!shouldMask) return text;
+
+  let result = text;
+  if (firstName && firstName.trim()) {
+    const escaped = firstName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  }
+  if (lastName && lastName.trim()) {
+    const escaped = lastName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  }
+  return result;
+}
+
 // Convert UTC time string to GMT 12-hour label
 function formatTimeUTCtoGMT(timeUTC: string | null | undefined): string {
   if (!timeUTC) return "—";
