@@ -1012,7 +1012,9 @@ export default function TutorProfile() {
                     <BookOpen className="w-5 h-5 text-primary" />
                     About
                   </h2>
-                  <p className="text-muted-foreground leading-relaxed">{tutor.profile?.about_me || "No description available."}</p>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {maskNameInText(tutor.profile?.about_me, tutor.name, tutor.last_name, shouldBlur)}
+                  </p>
                 </motion.div>
 
                 {/* Education */}
