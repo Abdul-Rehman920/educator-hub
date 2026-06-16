@@ -26,6 +26,30 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
+function maskNameInText(
+  text: string | null | undefined,
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  shouldMask: boolean
+): string {
+  if (!text) return text || "";
+  if (!shouldMask) return text;
+
+  let result = text;
+  const namesToMask = [
+    ...(firstName ? firstName.trim().split(/\s+/) : []),
+    ...(lastName ? lastName.trim().split(/\s+/) : []),
+  ];
+
+  namesToMask.forEach((namePart) => {
+    if (namePart.length < 2) return;
+    const escaped = namePart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  });
+
+  return result;
+}
+
 type FilterOption = { id: number; name: string };
 
 type Tutor = {
