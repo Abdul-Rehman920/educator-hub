@@ -31,6 +31,8 @@ type FilterOption = { id: number; name: string };
 type Tutor = {
   id: number;
   name: string;
+  firstName?: string;  
+  last_name?: string;
   subject: string;
   specialization: string;
   intro: string;
