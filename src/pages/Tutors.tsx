@@ -190,6 +190,8 @@ export default function TutorsPage() {
       const mapped: Tutor[] = teachersData.map((t: any) => ({
         id: t.id,
         name: `${t.name || ""} ${t.last_name || ""}`.trim(),
+        firstName: t.name || "",      
+        last_name: t.last_name || "", 
         subject: t.subjects?.[0]?.name || "General",
         specialization: t.subjects?.map((s: any) => s.name).join(", ") || "",
         intro: t.profile?.about_me || "",
