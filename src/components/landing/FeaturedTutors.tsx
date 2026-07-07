@@ -6,9 +6,35 @@ import { Link } from "react-router-dom";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
+function maskNameInText(
+  text: string | null | undefined,
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  shouldMask: boolean
+): string {
+  if (!text) return text || "";
+  if (!shouldMask) return text;
+
+  let result = text;
+  const namesToMask = [
+    ...(firstName ? firstName.trim().split(/\s+/) : []),
+    ...(lastName ? lastName.trim().split(/\s+/) : []),
+  ];
+
+  namesToMask.forEach((namePart) => {
+    if (namePart.length < 2) return;
+    const escaped = namePart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  });
+
+  return result;
+}
+
 type Tutor = {
   id: number;
   name: string;
+  firstName: string;
+  last_name: string;
   avatar: string;
   subject: string;
   subjects: string[];
@@ -38,6 +64,8 @@ export function FeaturedTutors() {
         const mapped: Tutor[] = teachers.slice(0, 4).map((t: any) => ({
           id: t.id,
           name: `${t.name || ""} ${t.last_name || ""}`.trim(),
+          firstName: t.name || "",
+          last_name: t.last_name || "",
           avatar: t.profile?.profile_img || `https://ui-avatars.com/api/?name=${t.name}&background=random`,
           subject: t.subjects?.[0]?.name || "General",
           subjects: t.subjects?.map((s: any) => s.name) || [],
@@ -139,7 +167,9 @@ export function FeaturedTutors() {
 
                   {/* Details */}
                   <div className="px-6 pb-4 space-y-3">
-                    <p className="text-sm text-muted-foreground line-clamp-2">{tutor.intro}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {maskNameInText(tutor.intro, tutor.firstName, tutor.last_name, isLocked)}
+                    </p>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <BookOpen className="w-4 h-4 shrink-0" />
