@@ -8,9 +8,9 @@ import heroImage from "@/assets/hero-illustration.jpg";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 const stats = [
-  { icon: Users, value: "50,000+", label: "Active Tutors" },
-  { icon: Globe, value: "120+", label: "Countries" },
-  { icon: Star, value: "4.9/5", label: "Average Rating" },
+  { icon: Users, value: "1-on-1", label: "Personalized Session" },
+  { icon: Globe, value: "Global", label: "Tutor Network" },
+  { icon: Star, value: "Verified", label: "Expert Tutors" },
 ];
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export function Hero() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-light text-primary text-sm font-medium mb-6"
             >
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              Trusted by 500,000+ students worldwide
+              Learn from verified expert tutors, one-on-one
             </motion.div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground leading-tight mb-6">
@@ -171,7 +171,7 @@ export function Hero() {
             </h1>
 
             <p className="text-lg lg:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-8">
-              Connect with expert tutors from 120+ countries. Learn any subject, any curriculum, in your preferred language – all from the comfort of your home.
+              Connect with expert tutors from any countries. Learn any subject, any curriculum, in your preferred language – all from the comfort of your home.
             </p>
 
             {/* Search Box */}
@@ -332,7 +332,7 @@ export function Hero() {
                   <Star className="w-6 h-6 text-accent-foreground" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">Top Rated</p>
+                  <p className="font-semibold text-foreground">Expert</p>
                   <p className="text-sm text-muted-foreground">Verified tutors</p>
                 </div>
               </div>
@@ -349,8 +349,8 @@ export function Hero() {
                   <Globe className="w-6 h-6 text-success-foreground" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">120+ Countries</p>
-                  <p className="text-sm text-muted-foreground">Global reach</p>
+                  <p className="font-semibold text-foreground">Tutor Worldwide</p>
+                  <p className="text-sm text-muted-foreground">Global network</p>
                 </div>
               </div>
             </motion.div>

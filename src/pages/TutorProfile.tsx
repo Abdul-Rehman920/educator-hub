@@ -59,6 +59,27 @@ function formatTime12h(time24: string): string {
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+function maskNameInText(
+  text: string | null | undefined,
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  shouldMask: boolean
+): string {
+  if (!text) return "No description available.";
+  if (!shouldMask) return text;
+
+  let result = text;
+  if (firstName && firstName.trim()) {
+    const escaped = firstName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  }
+  if (lastName && lastName.trim()) {
+    const escaped = lastName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  }
+  return result;
+}
+
 // Convert UTC time string to GMT 12-hour label
 function formatTimeUTCtoGMT(timeUTC: string | null | undefined): string {
   if (!timeUTC) return "—";
@@ -172,6 +193,7 @@ type TutorData = {
   } | null;
   languages: { name: string }[];
   subjects: { name: string }[];
+  classes: { id: number; name: string }[];  // new addition of classes (education standards)
   profile: {
     about_me: string;
     rate_per_hour: number;
@@ -877,6 +899,19 @@ export default function TutorProfile() {
                         <p className="text-primary font-semibold text-lg mb-3">
                           {tutor.subjects?.map((s) => s.name).join(" & ") || "General"}
                         </p>
+                        {tutor.classes?.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                            <GraduationCap className="w-4 h-4 text-primary shrink-0" />
+                            {tutor.classes.map((c) => (
+                              <span
+                                key={c.id}
+                                className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                              >
+                                {c.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             <Star className="w-4 h-4 text-accent fill-accent" />
@@ -941,7 +976,7 @@ export default function TutorProfile() {
                               className={hasDispute ? "border-2" : ""}
                             >
                               <AlertCircle className="w-4 h-4 mr-1.5" />
-                              Dispute
+                              Refund Request
                             </Button>
                           )}
 
@@ -977,7 +1012,9 @@ export default function TutorProfile() {
                     <BookOpen className="w-5 h-5 text-primary" />
                     About
                   </h2>
-                  <p className="text-muted-foreground leading-relaxed">{tutor.profile?.about_me || "No description available."}</p>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {maskNameInText(tutor.profile?.about_me, tutor.name, tutor.last_name, shouldBlur)}
+                  </p>
                 </motion.div>
 
                 {/* Education */}
@@ -1045,26 +1082,26 @@ export default function TutorProfile() {
                     {sortedSchedule.length > 0 ? (
                       <div className="space-y-2">
                         {sortedSchedule.map((s, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-start justify-between p-3 rounded-xl border border-border bg-muted/30 gap-3"
-                          >
-                          <div className="flex items-center gap-2 pt-0.5 shrink-0">
-                            <span className="w-2 h-2 rounded-full bg-success" />
-                            <span className="font-semibold text-sm text-foreground">{dayLabel(s.day_name)}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm text-foreground font-medium">
-                              {formatTimeUTCtoGMT(s.start_time)} – {formatTimeUTCtoGMT(s.end_time)}
-                            </div>
-                            {tutor.country?.timezone && (
-                              <div className="text-[11px] text-muted-foreground mt-0.5">
-                                Tutor: {formatTimeUTCtoTutorLocal(s.start_time, tutor.country.timezone)} – {formatTimeUTCtoTutorLocal(s.end_time, tutor.country.timezone)}
-                              </div>
-                            )}
-                          </div>
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between p-3 rounded-xl border border-border bg-muted/30 gap-3"
+                        >
+                        <div className="flex items-center gap-2 pt-0.5 shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-success" />
+                          <span className="font-semibold text-sm text-foreground">{dayLabel(s.day_name)}</span>
                         </div>
-                      ))}
+                        <div className="text-right">
+                          <div className="text-sm text-foreground font-medium">
+                            {formatTimeUTCtoGMT(s.start_time)} – {formatTimeUTCtoGMT(s.end_time)}
+                          </div>
+                          {tutor.country?.timezone && (
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              Local Time : {formatTimeUTCtoTutorLocal(s.start_time, tutor.country.timezone)} – {formatTimeUTCtoTutorLocal(s.end_time, tutor.country.timezone)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                     </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">

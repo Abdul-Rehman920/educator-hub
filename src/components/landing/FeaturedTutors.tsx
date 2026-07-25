@@ -1,20 +1,49 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Star, MapPin, BookOpen, Globe, ChevronRight } from "lucide-react";
+import { Star, MapPin, BookOpen, Globe, ChevronRight, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
+
+function maskNameInText(
+  text: string | null | undefined,
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  shouldMask: boolean
+): string {
+  if (!text) return text || "";
+  if (!shouldMask) return text;
+
+  let result = text;
+  const namesToMask = [
+    ...(firstName ? firstName.trim().split(/\s+/) : []),
+    ...(lastName ? lastName.trim().split(/\s+/) : []),
+  ];
+
+  namesToMask.forEach((namePart) => {
+    if (namePart.length < 2) return;
+    const escaped = namePart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "•••");
+  });
+
+  return result;
+}
+
 type Tutor = {
   id: number;
   name: string;
+  firstName: string;
+  last_name: string;
   avatar: string;
   subject: string;
   subjects: string[];
   specialization: string;
   country: string;
   languages: string[];
+  curriculum: string[];
+  verified: boolean;
   rating: number;
   reviews: number;
   hourlyRate: number;
@@ -38,12 +67,16 @@ export function FeaturedTutors() {
         const mapped: Tutor[] = teachers.slice(0, 4).map((t: any) => ({
           id: t.id,
           name: `${t.name || ""} ${t.last_name || ""}`.trim(),
+          firstName: t.name || "",
+          last_name: t.last_name || "",
           avatar: t.profile?.profile_img || `https://ui-avatars.com/api/?name=${t.name}&background=random`,
           subject: t.subjects?.[0]?.name || "General",
           subjects: t.subjects?.map((s: any) => s.name) || [],
           specialization: t.subjects?.map((s: any) => s.name).join(", ") || "",
           country: t.country?.name || "N/A",
           languages: t.languages?.map((l: any) => l.name) || [],
+          curriculum: t.classes?.map((c: any) => c.name).filter(Boolean) || [],
+          verified: t.is_verified === 1,
           rating: parseFloat(t.average_review) || 0,
           reviews: t.reviews?.length || 0,
           hourlyRate: parseFloat(t.profile?.rate_per_hour) || 0,
@@ -123,11 +156,15 @@ export function FeaturedTutors() {
                         alt={tutor.name}
                         className={`w-[90px] h-[90px] rounded-full object-cover object-center ring-2 ring-primary/10 shrink-0 ${isLocked ? "blur-[8px]" : ""}`}
                       />
-                      <div className="flex-1 min-w-0">
+                      <div>
                         <h3 className={`font-semibold text-foreground truncate ${isLocked ? "blur-[5px] select-none" : ""}`}>
                           {tutor.name}
                         </h3>
-                        <p className="text-primary font-medium text-sm">{tutor.subject}</p>
+                        {tutor.verified && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-full bg-success/10 text-success text-xs font-medium">
+                            ✓ Verified
+                          </span>
+                        )}
                         <div className="flex items-center gap-1 mt-1">
                           <Star className="w-4 h-4 text-accent fill-accent" />
                           <span className="text-sm font-medium text-foreground">{tutor.rating}</span>
@@ -139,16 +176,22 @@ export function FeaturedTutors() {
 
                   {/* Details */}
                   <div className="px-6 pb-4 space-y-3">
-                    <p className="text-sm text-muted-foreground line-clamp-2">{tutor.intro}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {maskNameInText(tutor.intro, tutor.firstName, tutor.last_name, isLocked)}
+                    </p>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <BookOpen className="w-4 h-4 shrink-0" />
                         <span className="truncate">{truncatedSubjects(tutor)}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <MapPin className="w-4 h-4 shrink-0" />
-                        <span>{tutor.country}</span>
-                      </div>
+                      {tutor.curriculum.length > 0 && (
+                        <div className="flex items-center gap-2 text-muted-foreground min-w-0">
+                          <GraduationCap className="w-4 h-4 shrink-0" />
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium max-w-[140px] truncate">
+                            {tutor.curriculum[0]}{tutor.curriculum.length > 1 ? "..." : ""}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Globe className="w-4 h-4 shrink-0" />
                         <span>{tutor.languages.join(", ")}</span>

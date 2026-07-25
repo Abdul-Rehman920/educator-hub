@@ -14,19 +14,19 @@ const features = [
   {
     icon: Globe,
     title: "Global Tutor Network",
-    description: "Access tutors from 120+ countries, covering every curriculum from IB to CBSE, GCSE to AP.",
+    description: "Access tutors from around the world, covering every curriculum from IB to CBSE, GCSE to AP.",
     color: "primary",
   },
   {
     icon: Shield,
-    title: "Verified & Vetted",
-    description: "Every tutor goes through a rigorous verification process including background checks and credential verification.",
+    title: "Admin-Approved Profiles",
+    description: "Every tutor profile is reviewed and approved by our team before it goes live.",
     color: "success",
   },
   {
     icon: Video,
-    title: "HD Video Sessions",
-    description: "Crystal-clear video calls with interactive whiteboards, screen sharing, and session recording.",
+    title: "Flexible Video Sessions",
+    description: "Book a time that works, and your tutor sends a Google Meet or Zoom link to connect.",
     color: "tertiary",
   },
   {
@@ -55,8 +55,8 @@ const features = [
   },
   {
     icon: Award,
-    title: "Track Progress",
-    description: "Detailed progress reports, learning analytics, and achievement badges to stay motivated.",
+    title: "Curriculum-Matched Tutors",
+    description: "Find tutors tagged by education standard — IB, CBSE, GCSE, AP, and more — matched to your syllabus.",
     color: "accent",
   },
 ];

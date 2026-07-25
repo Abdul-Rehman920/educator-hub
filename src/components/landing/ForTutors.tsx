@@ -17,7 +17,7 @@ const benefits = [
   {
     icon: Users,
     title: "Global Reach",
-    description: "Connect with students from 120+ countries. Expand your teaching impact.",
+    description: "Connect with students from around the world. Expand your teaching impact.",
   },
   {
     icon: BarChart,
@@ -30,8 +30,8 @@ const checklist = [
   "Free profile creation",
   "Free membership",
   "Secure payment processing",
-  "Built-in video platform",
-  "Student management tools",
+  "Student reviews & ratings",
+  "Zero commission on your earnings",
 ];
 
 export function ForTutors() {
@@ -69,7 +69,7 @@ export function ForTutors() {
               <span className="text-gradient">Build Your Brand</span>
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Join thousands of tutors earning a sustainable income while making a real difference in students' lives worldwide.
+              Join our growing community of tutors earning a sustainable income while making a real difference in students' lives worldwide.
             </p>
 
             {/* Benefits Grid */}
@@ -133,11 +133,11 @@ export function ForTutors() {
 
               <div className="bg-primary-light rounded-xl p-6">
                 <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-4xl font-bold text-primary">$2M+</span>
-                  <span className="text-muted-foreground">paid to tutors</span>
+                  <span className="text-4xl font-bold text-primary">100%</span>
+                  <span className="text-muted-foreground">of your rate, no hidden cuts</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Our tutors have collectively earned over $2 million in the past year alone.
+                  Set your own hourly rate and keep control of your earnings, right from day one.
                 </p>
               </div>
             </div>
