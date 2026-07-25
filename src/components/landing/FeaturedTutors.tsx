@@ -6,7 +6,6 @@ import { Link } from "react-router-dom";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import api from "@/lib/api";
 
-
 function maskNameInText(
   text: string | null | undefined,
   firstName: string | null | undefined,
