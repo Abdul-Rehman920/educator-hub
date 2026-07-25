@@ -193,7 +193,7 @@ type TutorData = {
   } | null;
   languages: { name: string }[];
   subjects: { name: string }[];
-  classes: { id: number; name: string }[];  // new addition of classes ( education standard)
+  classes: { id: number; name: string }[];  // new addition of classes (education standards)
   profile: {
     about_me: string;
     rate_per_hour: number;
@@ -909,8 +909,8 @@ export default function TutorProfile() {
                               >
                                 {c.name}
                               </span>
-                           ))}
-                         </div>
+                            ))}
+                          </div>
                         )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1.5">
@@ -976,7 +976,7 @@ export default function TutorProfile() {
                               className={hasDispute ? "border-2" : ""}
                             >
                               <AlertCircle className="w-4 h-4 mr-1.5" />
-                              Dispute
+                              Refund Request
                             </Button>
                           )}
 
@@ -1082,26 +1082,26 @@ export default function TutorProfile() {
                     {sortedSchedule.length > 0 ? (
                       <div className="space-y-2">
                         {sortedSchedule.map((s, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-start justify-between p-3 rounded-xl border border-border bg-muted/30 gap-3"
-                          >
-                          <div className="flex items-center gap-2 pt-0.5 shrink-0">
-                            <span className="w-2 h-2 rounded-full bg-success" />
-                            <span className="font-semibold text-sm text-foreground">{dayLabel(s.day_name)}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm text-foreground font-medium">
-                              {formatTimeUTCtoGMT(s.start_time)} – {formatTimeUTCtoGMT(s.end_time)}
-                            </div>
-                            {tutor.country?.timezone && (
-                              <div className="text-[11px] text-muted-foreground mt-0.5">
-                                Tutor: {formatTimeUTCtoTutorLocal(s.start_time, tutor.country.timezone)} – {formatTimeUTCtoTutorLocal(s.end_time, tutor.country.timezone)}
-                              </div>
-                            )}
-                          </div>
+                        <div
+                          key={idx}
+                          className="flex items-start justify-between p-3 rounded-xl border border-border bg-muted/30 gap-3"
+                        >
+                        <div className="flex items-center gap-2 pt-0.5 shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-success" />
+                          <span className="font-semibold text-sm text-foreground">{dayLabel(s.day_name)}</span>
                         </div>
-                      ))}
+                        <div className="text-right">
+                          <div className="text-sm text-foreground font-medium">
+                            {formatTimeUTCtoGMT(s.start_time)} – {formatTimeUTCtoGMT(s.end_time)}
+                          </div>
+                          {tutor.country?.timezone && (
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              Local Time : {formatTimeUTCtoTutorLocal(s.start_time, tutor.country.timezone)} – {formatTimeUTCtoTutorLocal(s.end_time, tutor.country.timezone)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                     </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">

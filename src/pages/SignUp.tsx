@@ -1,3 +1,4 @@
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 import { useState, useMemo, useRef } from "react";
 import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
 import { Link, useParams, useNavigate } from "react-router-dom";
@@ -18,6 +19,7 @@ type AgeGroup = "" | "18+" | "under18";
 export default function SignUp() {
   const { role } = useParams<{ role: string }>();
   const navigate = useNavigate();
+  const { executeRecaptcha } = useGoogleReCaptcha();
   const userRole: Role = role === "student" ? "student" : "teacher";
   const label = userRole === "teacher" ? "Teacher" : "Student";
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +119,12 @@ export default function SignUp() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
+    if (!executeRecaptcha) {
+      toast({ title: "Error", description: "reCAPTCHA not ready. Please try again.", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+    const captchaToken = await executeRecaptcha("register");
     try {
       const countriesRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get/countries`);
       const countriesData = await countriesRes.json();
@@ -137,6 +145,7 @@ export default function SignUp() {
       formData.append("country_id", countryId.toString());
       formData.append("calling_digits", callingDigits);
       formData.append("phone", form.phone);
+      formData.append("g-recaptcha-response", captchaToken);
       if (isMinor) {
         formData.append("under_18", "1");
         formData.append("parent_name", form.guardianName);
@@ -179,6 +188,11 @@ export default function SignUp() {
 
   const handleOtpVerified = () => {
     setShowOtp(false);
+
+    // For fresh signup remove the profile complete flag 
+    localStorage.removeItem("teacherProfileComplete");
+    localStorage.removeItem("studentProfileComplete");
+
     toast({ title: "Account created!", description: `Your ${label.toLowerCase()} account is ready.` });
     const signupData = {
       firstName: form.firstName,

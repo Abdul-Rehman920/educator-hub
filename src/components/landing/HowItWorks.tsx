@@ -12,7 +12,7 @@ const steps = [
     icon: Search,
     step: "02",
     title: "Find the Perfect Match",
-    description: "Search by subject, curriculum, language, and budget. Read reviews and watch intro videos.",
+    description: "Search by subject, curriculum, language, and budget. Read reviews and take demo sessions.",
   },
   {
     icon: Calendar,
@@ -24,7 +24,7 @@ const steps = [
     icon: Video,
     step: "04",
     title: "Start Learning",
-    description: "Connect via HD video, use interactive tools, and track your progress over time.",
+    description: "Connect with your tutor via Google Meet or Zoom at your scheduled time and begin your sessions.",
   },
 ];
 

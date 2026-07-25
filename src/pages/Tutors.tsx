@@ -55,7 +55,7 @@ type FilterOption = { id: number; name: string };
 type Tutor = {
   id: number;
   name: string;
-  firstName?: string;  
+  firstName?: string;
   last_name?: string;
   subject: string;
   specialization: string;
@@ -98,7 +98,7 @@ export default function TutorsPage() {
   // Filter values (store IDs for API, "" means "All")
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStandard, setSelectedStandard] = useState("all");
-  // ✨ CHANGED: Subject is now multi-select (array of IDs)
+  //  CHANGED: Subject is now multi-select (array of IDs)
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState("all");
   const [selectedCountry, setSelectedCountry] = useState("all");
@@ -183,7 +183,7 @@ export default function TutorsPage() {
 
       if (searchQuery.trim()) params.append("keyword", searchQuery.trim());
       
-      // ✨ CHANGED: Multiple subjects sent as comma-separated
+      //  CHANGED: Multiple subjects sent as comma-separated
       if (selectedSubjects.length > 0) {
         params.append("subjects", selectedSubjects.join(","));
       }
@@ -202,7 +202,7 @@ export default function TutorsPage() {
       // Max rate
       if (maxRate[0] < 500) params.append("rate_per_hour", String(maxRate[0]));
 
-      // ✨ Sort by — backend ko batao kaunsa sort chahiye
+      //  Sort by — backend ko batao kaunsa sort chahiye
       // "relevant" = backend smart ranking apply karega (logged-in students ke liye)
       params.append("sort_by", sortBy);
 
@@ -214,14 +214,14 @@ export default function TutorsPage() {
       const mapped: Tutor[] = teachersData.map((t: any) => ({
         id: t.id,
         name: `${t.name || ""} ${t.last_name || ""}`.trim(),
-        firstName: t.name || "",      
+        firstName: t.name || "", 
         last_name: t.last_name || "", 
         subject: t.subjects?.[0]?.name || "General",
         specialization: t.subjects?.map((s: any) => s.name).join(", ") || "",
         intro: t.profile?.about_me || "",
         avatar: t.profile?.profile_img || `https://ui-avatars.com/api/?name=${t.name}&background=random`,
         rating: parseFloat(t.average_review) || 0,
-        reviews: t.reviews?.length || t.reviews_received?.length || 0,
+        reviews: t.reviews || 0,
         experience: "N/A",
         hourlyRate: parseFloat(t.profile?.rate_per_hour) || 0,
         groupRate: parseFloat(t.profile?.group_rate_per_hour) || 0,
@@ -244,13 +244,13 @@ export default function TutorsPage() {
     } finally {
       setLoading(false);
     }
-    // ✨ CHANGED: selectedSubject → selectedSubjects
+    //  CHANGED: selectedSubject → selectedSubjects
   }, [searchQuery, selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
 
   // When standard changes, refetch subjects for that standard
   useEffect(() => {
     fetchSubjectsForStandard(selectedStandard);
-    // ✨ CHANGED: Reset selected subjects (array) when standard changes
+    //  CHANGED: Reset selected subjects (array) when standard changes
     setSelectedSubjects([]);
   }, [selectedStandard]);  
   
@@ -258,7 +258,7 @@ export default function TutorsPage() {
   useEffect(() => {
     setCurrentPage(1);
     fetchTutors(1);
-    // ✨ CHANGED: selectedSubject → selectedSubjects
+    //  CHANGED: selectedSubject → selectedSubjects
   }, [selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
 
   // Debounced search
@@ -301,7 +301,7 @@ export default function TutorsPage() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    // ✨ CHANGED: Reset to empty array
+    //  CHANGED: Reset to empty array
     setSelectedSubjects([]);
     setSelectedStandard("all");
     setSelectedLanguage("all");
@@ -312,7 +312,7 @@ export default function TutorsPage() {
     setSortBy("relevant");
   };
 
-  // ✨ CHANGED: Check selectedSubjects.length instead of selectedSubject !== "all"
+  //  CHANGED: Check selectedSubjects.length instead of selectedSubject !== "all"
   const hasActiveFilters =
     selectedSubjects.length > 0 ||
     selectedStandard !== "all" ||
@@ -339,7 +339,7 @@ export default function TutorsPage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
               <h1 className="text-3xl lg:text-4xl font-bold text-primary-foreground mb-4">Find Your Perfect Tutor</h1>
               <p className="text-primary-foreground/80 text-lg">
-                {loading ? "Loading..." : `${totalCount}+ expert tutors ready to help you succeed`}
+                {loading ? "Loading..." : "Browse our tutors and find the right one for you"}
               </p>
             </motion.div>
 
@@ -659,8 +659,13 @@ export default function TutorsPage() {
                                     <div>
                                       <h3 className={`font-semibold text-foreground text-lg ${isLocked ? "blur-[5px] select-none" : ""}`}>{tutor.name}</h3>
                                       <p className="text-primary font-medium">{truncatedSubjectLabel(tutor)}</p>
+                                      {tutor.curriculum.length > 0 && (
+                                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium whitespace-nowrap">
+                                          {tutor.curriculum[0]}{tutor.curriculum.length > 1 ? "..." : ""}
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="text-right text-sm space-y-0.5">
+                                    <div className="text-left text-sm space-y-0.5">
                                       <p className="font-bold text-foreground">Private: ${tutor.hourlyRate}/hr</p>
                                       <p className="font-bold text-foreground">Group: ${tutor.groupRate}/hr</p>
                                     </div>
@@ -682,8 +687,13 @@ export default function TutorsPage() {
                                     <p className="text-primary font-medium">
                                       {truncatedSubjectLabel(tutor)}
                                     </p>
+                                      {tutor.curriculum.length > 0 && (
+                                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium whitespace-nowrap">
+                                          {tutor.curriculum[0]}{tutor.curriculum.length > 1 ? "..." : ""}
+                                        </span>
+                                      )}
                                   </div>
-                                  <div className="text-right text-sm space-y-0.5 shrink-0">
+                                  <div className="text-left text-sm space-y-0.5 shrink-0">
                                     <p className="font-bold text-foreground">Private: ${tutor.hourlyRate}/hr</p>
                                     <p className="font-bold text-foreground">Group: ${tutor.groupRate}/hr</p>
                                   </div>
@@ -696,11 +706,9 @@ export default function TutorsPage() {
                                     <span className="text-muted-foreground">({tutor.reviews} reviews)</span>
                                   </div>
                                 </div>
-
                                 <p className="text-muted-foreground mb-4 line-clamp-2">
                                   {maskNameInText(tutor.intro, tutor.firstName, tutor.last_name, isLocked)}
                                 </p>
-
                                 <div className="flex flex-wrap gap-2 mb-4">
                                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">
                                     <MapPin className="w-3 h-3" />
