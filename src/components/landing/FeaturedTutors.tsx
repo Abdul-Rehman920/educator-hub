@@ -167,7 +167,7 @@ export function FeaturedTutors() {
                         <div className="flex items-center gap-1 mt-1">
                           <Star className="w-4 h-4 text-accent fill-accent" />
                           <span className="text-sm font-medium text-foreground">{tutor.rating}</span>
-                          <span className="text-sm text-muted-foreground">({tutor.reviews})</span>
+                          <span className="text-sm text-muted-foreground">({tutor.reviews} {tutor.reviews === 1 ? "review" : "reviews"})</span>
                         </div>
                       </div>
                     </div>
