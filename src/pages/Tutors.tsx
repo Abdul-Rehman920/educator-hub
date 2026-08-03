@@ -410,9 +410,9 @@ export default function TutorsPage() {
                       )}
                     </div>
 
-                    {/* Education Standard */}
+                    {/* Standard */}
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Education Standard</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">Standard</label>
                       <Select value={selectedStandard} onValueChange={setSelectedStandard}>
                         <SelectTrigger>
                           <SelectValue placeholder="All Standards" />
