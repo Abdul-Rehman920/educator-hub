@@ -104,9 +104,9 @@ export function Hero() {
       const filtered = allTeachers.filter((t) => {
         const fullName = `${t.name || ""} ${t.last_name || ""}`.toLowerCase();
         const countryName = (t.country?.name || "").toLowerCase();
-        const subjectNames = (t.subjects || []).map((s) => s.name.toLowerCase());
-        const languageNames = (t.languages || []).map((l) => l.name.toLowerCase());
-        const classNames = (t.classes || []).map((c) => c.name.toLowerCase());
+        const subjectNames = (t.subjects || []).map((s) => (s?.name || "").toLowerCase());
+        const languageNames = (t.languages || []).map((l) => (l?.name || "").toLowerCase());
+        const classNames = (t.classes || []).map((c) => (c?.name || "").toLowerCase());
 
         return (
           fullName.includes(q) ||
