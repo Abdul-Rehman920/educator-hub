@@ -1,3 +1,4 @@
+import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, Star, Users, Globe, MapPin, Loader2 } from "lucide-react";
@@ -49,6 +50,7 @@ export function Hero() {
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
+  const { unlockedTutorIds } = useUnlockedTutors();
 
   // ─── Fetch all teachers once (for client-side filtering) ────
   const fetchAllTeachers = useCallback(async () => {
@@ -212,6 +214,7 @@ export function Hero() {
                     const countryName = teacher.country?.name || "";
                     const mainSubject = teacher.subjects?.[0]?.name || teacher.classes?.[0]?.name || "";
                     const rating = Number(teacher.average_review || 0);
+                    const isLocked = !unlockedTutorIds.has(teacher.id);
                     const displaySubject = mainSubject
                       ? countryName
                         ? `${mainSubject} · ${countryName}`
@@ -232,7 +235,7 @@ export function Hero() {
                           <img
                             src={avatarUrl}
                             alt={fullName}
-                            className="w-10 h-10 rounded-full object-cover shrink-0"
+                            className={`w-10 h-10 rounded-full object-cover shrink-0 ${isLocked ? "blur-[8px]" : ""}`}
                             onError={(e) => {
                               (e.target as HTMLImageElement).style.display = "none";
                             }}
@@ -245,7 +248,7 @@ export function Hero() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground text-sm truncate">
+                          <p className={`font-semibold text-foreground text-sm truncate ${isLocked ? "blur-[5px] select-none" : ""}`}>
                             {fullName}
                           </p>
                           {displaySubject && (
