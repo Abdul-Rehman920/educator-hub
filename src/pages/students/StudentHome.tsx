@@ -14,6 +14,7 @@ import {
   HeartOff,
   X,
   Users,
+  GraduationCap,   // new
 } from "lucide-react";
 import { useUnlockedTutors } from "@/contexts/UnlockedTutorsContext";
 import { toast } from "@/hooks/use-toast";
@@ -34,6 +35,8 @@ type Tutor = {
   groupRate: number;
   country: string;
   languages: string[];
+  curriculum: string[];   // new
+  verified: boolean;      // new
 };
 
 const MAX_FAVORITES = 3;
@@ -77,7 +80,7 @@ export default function StudentHome() {
         : `${import.meta.env.VITE_API_BASE_URL?.replace("/api", "")}/${t.profile.profile_img}`
       : `https://ui-avatars.com/api/?name=${t.name}&background=random`,
     rating: parseFloat(t.average_review) || 0,
-    reviews: t.reviews?.length || t.reviews_received?.length || 0,
+    reviews: t.reviews || t.reviews_received || 0,   // fix
     hourlyRate: parseFloat(t.profile?.rate_per_hour) || 0,
     groupRate: parseFloat(t.profile?.group_rate_per_hour) || 0,
     country: t.country?.name || "N/A",
@@ -85,6 +88,8 @@ export default function StudentHome() {
       t.languages?.map((l: any) => l.name) ||
       t.user_languages?.map((l: any) => l.language?.name).filter(Boolean) ||
       [],
+    curriculum: t.classes?.map((c: any) => c.abbreviation || c.name).filter(Boolean) || [],   // new
+    verified: t.is_verified === 1,   // new
   });
 
   // ─── Helper: truncate subjects to max 2 ───
@@ -275,6 +280,11 @@ export default function StudentHome() {
               >
                 {tutor.name}
               </h3>
+              {tutor.verified && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-full bg-success/10 text-success text-xs font-medium">
+                  ✓ Verified
+                </span>
+              )}              
               <p className="text-primary font-medium text-sm">{tutor.subject}</p>
               <div className="flex items-center gap-1 mt-1">
                 <Star className="w-4 h-4 text-accent fill-accent" />
@@ -282,7 +292,7 @@ export default function StudentHome() {
                   {tutor.rating}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  ({tutor.reviews})
+                  ({tutor.reviews} {tutor.reviews === 1 ? "review" : "reviews"})
                 </span>
               </div>
             </div>
@@ -300,10 +310,14 @@ export default function StudentHome() {
               <BookOpen className="w-4 h-4 shrink-0" />
               <span className="truncate">{truncatedSubjects(tutor)}</span>
             </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <MapPin className="w-4 h-4 shrink-0" />
-              <span className="truncate">{tutor.country}</span>
-            </div>
+            {tutor.curriculum.length > 0 && (
+              <div className="flex items-center gap-2 text-muted-foreground min-w-0">
+                <GraduationCap className="w-4 h-4 shrink-0" />
+                <span className="inline-block px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium max-w-[140px] truncate">
+                  {tutor.curriculum[0]}{tutor.curriculum.length > 1 ? "..." : ""}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-muted-foreground">
               <Globe className="w-4 h-4 shrink-0" />
               <span className="truncate">{tutor.languages.join(", ")}</span>
