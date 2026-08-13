@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { countries } from "@/lib/countries";
 import { toast } from "@/hooks/use-toast";
 import { OtpVerificationModal } from "@/components/auth/OtpVerificationModal";
+import Turnstile from "react-turnstile";
 
 type Role = "teacher" | "student";
 type AgeGroup = "" | "18+" | "under18";
@@ -19,7 +20,6 @@ type AgeGroup = "" | "18+" | "under18";
 export default function SignUp() {
   const { role } = useParams<{ role: string }>();
   const navigate = useNavigate();
-  const { executeRecaptcha } = useGoogleReCaptcha();
   const userRole: Role = role === "student" ? "student" : "teacher";
   const label = userRole === "teacher" ? "Teacher" : "Student";
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +43,7 @@ export default function SignUp() {
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showOtp, setShowOtp] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   const set = (key: string, val: string) => {
     setForm((p) => {
@@ -83,6 +84,7 @@ export default function SignUp() {
 
   const validate = () => {
     const errs: Record<string, string> = {};
+    if (!turnstileToken) errs.turnstile = "Please complete the verification";
     if (userRole === "student" && !ageGroup) errs.ageGroup = "Please select your age group";
     if (!form.firstName.trim()) errs.firstName = "First name is required";
     if (!form.lastName.trim()) errs.lastName = "Last name is required";
@@ -119,12 +121,6 @@ export default function SignUp() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    if (!executeRecaptcha) {
-      toast({ title: "Error", description: "reCAPTCHA not ready. Please try again.", variant: "destructive" });
-      setLoading(false);
-      return;
-    }
-    const captchaToken = await executeRecaptcha("register");
     try {
       const countriesRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get/countries`);
       const countriesData = await countriesRes.json();
@@ -145,7 +141,7 @@ export default function SignUp() {
       formData.append("country_id", countryId.toString());
       formData.append("calling_digits", callingDigits);
       formData.append("phone", form.phone);
-      formData.append("g-recaptcha-response", captchaToken);
+      formData.append("turnstile_token", turnstileToken);
       if (isMinor) {
         formData.append("under_18", "1");
         formData.append("parent_name", form.guardianName);
@@ -516,7 +512,19 @@ export default function SignUp() {
                       </div>
                     </div>
                   )}
-
+                  
+                  <div className="pt-2">
+                    <Turnstile
+                      sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                      onVerify={(token) => {
+                        setTurnstileToken(token);
+                        setErrors((p) => ({ ...p, turnstile: "" }));
+                      }}
+                      onExpire={() => setTurnstileToken("")}
+                    />
+                    {errors.turnstile && <p className="text-xs text-destructive">{errors.turnstile}</p>}
+                  </div>
+                  
                   <Button type="submit" className="w-full" size="lg" disabled={loading}>
                     {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                     {loading ? "Creating Account..." : `Create ${label} Account`}
