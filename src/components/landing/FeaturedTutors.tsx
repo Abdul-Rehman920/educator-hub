@@ -74,7 +74,7 @@ export function FeaturedTutors() {
           specialization: t.subjects?.map((s: any) => s.name).join(", ") || "",
           country: t.country?.name || "N/A",
           languages: t.languages?.map((l: any) => l.name) || [],
-          curriculum: t.classes?.map((c: any) => c.name).filter(Boolean) || [],
+          curriculum: t.classes?.map((c: any) => c.abbreviation || c.name).filter(Boolean) || [],
           verified: t.is_verified === 1,
           rating: parseFloat(t.average_review) || 0,
           reviews: t.reviews?.length || 0,
