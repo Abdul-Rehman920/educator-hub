@@ -272,7 +272,7 @@ export default function TutorsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  /* ── Client-side sort (backend doesn't have sort param) ── */
+  /* ── Client-side sort (backend already sorts "relevant" via match_score) ── */
   const sortedTutors = useMemo(() => {
     let result = [...tutors];
 
@@ -287,14 +287,9 @@ export default function TutorsPage() {
       result.sort((a, b) => a.hourlyRate - b.hourlyRate);
     } else if (sortBy === "price-high") {
       result.sort((a, b) => b.hourlyRate - a.hourlyRate);
-    } else if (sortBy === "relevant") {
-      // Most relevant = rating * reviews weight
-      result.sort((a, b) => {
-        const scoreA = a.rating * (1 + a.reviews * 0.1);
-        const scoreB = b.rating * (1 + b.reviews * 0.1);
-        return scoreB - scoreA;
-      });
     }
+    // "relevant" → backend already returns tutors in correct match_score order,
+    // don't re-sort here, just keep the API's order as-is.
 
     return result;
   }, [tutors, sortBy, demoClassFilter]);
