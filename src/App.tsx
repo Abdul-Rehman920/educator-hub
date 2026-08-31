@@ -12,6 +12,10 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
+import LegalPage from "./pages/LegalPage";
+import BlogListing from "./pages/BlogListing";
+import BlogDetail from "./pages/BlogDetail";
+import ContactUs from "./pages/ContactUs";
 import DashboardHome from "./pages/dashboard/DashboardHome";
 import DashboardProfile from "./pages/dashboard/DashboardProfile";
 import DashboardWallet from "./pages/dashboard/DashboardWallet";
@@ -44,6 +48,10 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/signup/:role" element={<SignUp />} />
+          <Route path="/legal/:slug" element={<LegalPage />} />
+          <Route path="/blogs" element={<BlogListing />} />
+          <Route path="/blog/:id" element={<BlogDetail />} />
+          <Route path="/contact" element={<ContactUs />} />
 
           {/* Teacher Dashboard - Protected */}
           <Route path="/dashboard" element={<ProtectedRoute allowedRole="teacher"><DashboardHome /></ProtectedRoute>} />

@@ -17,11 +17,10 @@ const footerLinks = {
     // { name: "Tutor FAQ", href: "/faq/tutors" },
   ],
   subjects: [
-    "Mathematics",
-    "Science",
-    "Languages",
-    "Test Prep",
-    "All Subjects",
+    { name: "Mathematics", href: "/tutors" },
+    { name: "Science", href: "/tutors" },
+    { name: "Computer Science", href: "/tutors" },
+    { name: "A/O Level", href: "/tutors" },
   ],
   //subjects: [
     //{ name: "Mathematics", href: "/tutors?subject=math" },
@@ -30,13 +29,12 @@ const footerLinks = {
     //{ name: "Test Prep", href: "/tutors?subject=test-prep" },
     //{ name: "All Subjects", href: "/subjects" },
   //],
-  //company: [
-    //{ name: "About Us", href: "/about" },
-    //{ name: "Careers", href: "/careers" },
-    //{ name: "Blog", href: "/blog" },
-    //{ name: "Press", href: "/press" },
-    //{ name: "Contact", href: "/contact" },
-  //],
+    company: [
+    { name: "About Us", href: "/legal/about-us" },
+    { name: "Careers", href: "/legal/careers" },
+    { name: "Blog", href: "/blogs" },
+    { name: "Contact", href: "/contact" },
+  ],
 };
 
 const socialLinks = [
@@ -64,7 +62,7 @@ export function Footer() {
     <footer className="bg-foreground text-primary-foreground">
       <div className="section-container py-16 lg:py-20">
         {/* Main Footer Content */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 lg:gap-12 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8 lg:gap-12 mb-12">
           {/* Brand */}
           <div className="col-span-2 md:col-span-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
@@ -140,16 +138,35 @@ export function Footer() {
             </ul>
           </div>
 
+          {/* Company */}
+          <div>
+            <h3 className="font-semibold mb-4">Company</h3>
+            <ul className="space-y-3">
+              {footerLinks.company.map((link) => (
+                <li key={link.name}>
+                  <Link
+                    to={link.href}
+                    className="text-primary-foreground/70 hover:text-primary-foreground transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {/* Subjects — plain text, not clickable */}
           <div>
             <h3 className="font-semibold mb-4">Subjects</h3>
             <ul className="space-y-3">
               {footerLinks.subjects.map((subject) => (
-                <li
-                  key={subject}
-                  className="text-primary-foreground/70 text-sm"
-                >
-                  {subject}
+                <li key={subject.name}>
+                  <Link
+                    to={subject.href}
+                    className="text-primary-foreground/70 hover:text-primary-foreground transition-colors text-sm"
+                  >
+                    {subject.name}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -161,16 +178,19 @@ export function Footer() {
           <p className="text-primary-foreground/50 text-sm">
             © {new Date().getFullYear()} Educator Hub. All rights reserved.
           </p>
-          <div className="flex gap-6">
-            <span className="text-primary-foreground/50 text-sm">
+          <div className="flex gap-6 flex-wrap justify-center">
+            <Link to="/legal/privacy-policy" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
               Privacy Policy
-            </span>
-            <span className="text-primary-foreground/50 text-sm">
-              Terms of Service
-            </span>
-            <span className="text-primary-foreground/50 text-sm">
+            </Link>
+            <Link to="/legal/terms-condition" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
+              Terms and Conditions
+            </Link>
+            <Link to="/legal/cookie-policy" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
               Cookie Policy
-            </span>
+            </Link>
+            <Link to="/legal/legal-notice" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
+              Legal Notice
+            </Link>
           </div>
         </div>
       </div>
