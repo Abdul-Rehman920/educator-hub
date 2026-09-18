@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
-import { Shield, FileText, Cookie, Scale, Briefcase, Info, Loader2 } from "lucide-react";
+import { Shield, FileText, Cookie, Scale, Briefcase, Info, Loader2, ArrowLeft } from "lucide-react";
 import api from "@/lib/api";
 
 type CmsPage = {
@@ -53,6 +53,12 @@ const LegalPage = () => {
       <Header />
       <main className="pt-24 lg:pt-32 pb-20">
         <div className="section-container max-w-4xl">
+          <Link
+            to="/legal-center"
+            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-6"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Legal Center
+          </Link>
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-light mb-6">
               <Icon className="w-8 h-8 text-primary" />

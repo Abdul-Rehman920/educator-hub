@@ -14,7 +14,7 @@ const features = [
   {
     icon: Globe,
     title: "Global Tutor Network",
-    description: "Access tutors from around the world, covering every curriculum from IB to CBSE, GCSE to AP.",
+    description: "Global reach to tutors specializing in all educational and professional qualifications.",
     color: "primary",
   },
   {
@@ -50,7 +50,7 @@ const features = [
   {
     icon: CreditCard,
     title: "Secure Payments",
-    description: "Protected transactions with money-back guarantee. Pay only for completed sessions.",
+    description: "Only pay the introduction fee. Refundable if you decide not to continue with the tutor. T&Cs apply.",
     color: "tertiary",
   },
   {

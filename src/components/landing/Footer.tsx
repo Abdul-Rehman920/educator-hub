@@ -17,10 +17,10 @@ const footerLinks = {
     // { name: "Tutor FAQ", href: "/faq/tutors" },
   ],
   subjects: [
-    { name: "Mathematics", href: "/tutors" },
-    { name: "Science", href: "/tutors" },
-    { name: "Computer Science", href: "/tutors" },
-    { name: "A/O Level", href: "/tutors" },
+    { name: "Mathematics", href: "/tutors?subject=" + encodeURIComponent("Mathematics") },
+    { name: "Physics", href: "/tutors?subject=" + encodeURIComponent("Physics") },
+    { name: "Computer Science", href: "/tutors?subject=" + encodeURIComponent("Python") },
+    { name: "English Language", href: "/tutors?subject=" + encodeURIComponent("English Literature B") },
   ],
   //subjects: [
     //{ name: "Mathematics", href: "/tutors?subject=math" },
@@ -182,8 +182,8 @@ export function Footer() {
             <Link to="/legal/privacy-policy" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
               Privacy Policy
             </Link>
-            <Link to="/legal/terms-condition" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
-              Terms and Conditions
+            <Link to="/legal-center" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
+              Legal Center
             </Link>
             <Link to="/legal/cookie-policy" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors text-sm">
               Cookie Policy

@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { GraduationCap, Mail, Phone, Loader2, CheckCircle, Upload, ShieldCheck, AlertTriangle } from "lucide-react";
+import { GraduationCap, Mail, Phone, Loader2, CheckCircle, ShieldCheck, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,6 @@ export default function SignUp() {
   const navigate = useNavigate();
   const userRole: Role = role === "student" ? "student" : "teacher";
   const label = userRole === "teacher" ? "Teacher" : "Student";
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [ageGroup, setAgeGroup] = useState<AgeGroup>("");
   const [form, setForm] = useState({
@@ -37,7 +36,6 @@ export default function SignUp() {
     guardianName: "",
     guardianEmail: "",
   });
-  const [guardianPhotoId, setGuardianPhotoId] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -110,7 +108,6 @@ export default function SignUp() {
       if (!form.guardianName.trim()) errs.guardianName = "Parent/Guardian name is required";
       if (!form.guardianEmail.trim()) errs.guardianEmail = "Parent/Guardian email is required";
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.guardianEmail)) errs.guardianEmail = "Invalid email format";
-      if (!guardianPhotoId) errs.guardianPhotoId = "Photo ID is required for parental verification";
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -145,9 +142,6 @@ export default function SignUp() {
         formData.append("under_18", "1");
         formData.append("parent_name", form.guardianName);
         formData.append("parent_email", form.guardianEmail);
-        if (guardianPhotoId) {
-          formData.append("id_card_image", guardianPhotoId);
-        }
       }
 
       const response = await fetch(
@@ -212,7 +206,6 @@ export default function SignUp() {
           isMinor: true,
           guardianName: form.guardianName,
           guardianEmail: form.guardianEmail,
-          guardianPhotoIdName: guardianPhotoId?.name || "",
         } : {}),
       },
     });
@@ -333,7 +326,7 @@ export default function SignUp() {
                   <div className="flex items-start gap-2.5 p-3 rounded-xl bg-accent/10 border border-accent/30 mb-5">
                     <AlertTriangle className="w-4 h-4 text-accent mt-0.5 shrink-0" />
                     <p className="text-xs text-foreground/80">
-                      Since you are under 18, a parent or guardian must provide their details and upload a valid photo ID for verification. Your account will be reviewed before activation.
+                      Since you are under 18, a parent or guardian must provide their details. Your account will be reviewed before activation.
                     </p>
                   </div>
                 )}
@@ -465,49 +458,6 @@ export default function SignUp() {
                           />
                         </div>
                         {errors.guardianEmail && <p className="text-xs text-destructive">{errors.guardianEmail}</p>}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Parent/Guardian Photo ID <span className="text-destructive">*</span></Label>
-                        <p className="text-xs text-muted-foreground">Upload a valid government-issued photo ID for verification.</p>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/png,image/jpeg,image/jpg,image/webp"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0] || null;
-                            setGuardianPhotoId(file);
-                            setErrors((p) => ({ ...p, guardianPhotoId: "" }));
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className={`w-full flex items-center justify-center gap-2 h-20 rounded-xl border-2 border-dashed transition-colors ${
-                            guardianPhotoId
-                              ? "border-primary bg-primary/5"
-                              : errors.guardianPhotoId
-                              ? "border-destructive bg-destructive/5"
-                              : "border-input hover:border-muted-foreground/40"
-                          }`}
-                        >
-                          {guardianPhotoId ? (
-                            <div className="flex items-center gap-2 text-sm text-foreground">
-                              <CheckCircle className="w-4 h-4 text-success" />
-                              <span className="truncate max-w-[200px]">{guardianPhotoId.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                ({(guardianPhotoId.size / 1024).toFixed(0)} KB)
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                              <Upload className="w-5 h-5" />
-                              <span className="text-xs">Click to upload photo ID (PNG, JPG)</span>
-                            </div>
-                          )}
-                        </button>
-                        {errors.guardianPhotoId && <p className="text-xs text-destructive">{errors.guardianPhotoId}</p>}
                       </div>
                     </div>
                   )}

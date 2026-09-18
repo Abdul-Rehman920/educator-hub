@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Search,
   Filter,
@@ -77,6 +77,8 @@ type Tutor = {
 
 export default function TutorsPage() {
   const { unlockedTutorIds } = useUnlockedTutors();
+  const [searchParams] = useSearchParams();
+  const appliedUrlSubject = useRef(false);
 
   // ─── Logged-in user info (for own-profile unblur) ───
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -117,6 +119,7 @@ export default function TutorsPage() {
 
   // Debounce timer for search
   const [searchTimer, setSearchTimer] = useState<any>(null);
+  const requestIdRef = useRef(0);
 
   /* ── Fetch subjects (filtered by standard if provided) ── */
   const fetchSubjectsForStandard = async (standardId: string | null) => {
@@ -174,8 +177,25 @@ export default function TutorsPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (appliedUrlSubject.current) return;
+    if (subjectsList.length === 0) return;
+
+    const subjectFromUrl = searchParams.get("subject");
+    if (subjectFromUrl) {
+      const match = subjectsList.find(
+        (s) => s.name.toLowerCase() === subjectFromUrl.toLowerCase()
+      );
+      if (match) {
+        setSelectedSubjects([String(match.id)]);
+      }
+    }
+    appliedUrlSubject.current = true;
+  }, [subjectsList, searchParams]);  
+
   /* ── Build query params and fetch tutors ── */
   const fetchTutors = useCallback(async (page = 1) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -233,26 +253,30 @@ export default function TutorsPage() {
         curriculum: t.classes?.map((c: any) => c.name).filter(Boolean) || [],
         demo_class: t.profile?.demo_class === 1,
       }));
-
+      if (requestId !== requestIdRef.current) return; // stale response, ignore
       setTutors(mapped);
       setTotalCount(json?.meta?.total || json?.total || mapped.length);
       setCurrentPage(json?.meta?.current_page || page);
       setLastPage(json?.meta?.last_page || 1);
     } catch (error) {
+      if (requestId !== requestIdRef.current) return; // stale response, ignore
       console.error("Teachers fetch error:", error);
       setTutors([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
     //  CHANGED: selectedSubject → selectedSubjects
   }, [searchQuery, selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate]);
 
   // When standard changes, refetch subjects for that standard
+  const prevStandardRef = useRef(selectedStandard);
   useEffect(() => {
     fetchSubjectsForStandard(selectedStandard);
-    //  CHANGED: Reset selected subjects (array) when standard changes
-    setSelectedSubjects([]);
-  }, [selectedStandard]);  
+    if (prevStandardRef.current !== selectedStandard) {
+      setSelectedSubjects([]);
+      prevStandardRef.current = selectedStandard;
+    }
+  }, [selectedStandard]);
   
   // Fetch on filter change (reset to page 1)
   useEffect(() => {
@@ -262,7 +286,11 @@ export default function TutorsPage() {
   }, [selectedSubjects, selectedStandard, selectedLanguage, selectedCountry, tuitionType, demoClassFilter, maxRate, fetchTutors]);
 
   // Debounced search
+  const prevSearchRef = useRef(searchQuery);
   useEffect(() => {
+    if (prevSearchRef.current === searchQuery) return;
+    prevSearchRef.current = searchQuery;
+
     if (searchTimer) clearTimeout(searchTimer);
     const timer = setTimeout(() => {
       setCurrentPage(1);

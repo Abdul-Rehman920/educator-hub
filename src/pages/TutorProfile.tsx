@@ -1145,7 +1145,7 @@ export default function TutorProfile() {
                     Unlock Contact Details
                   </DialogTitle>
                   <DialogDescription>
-                    Pay a one-time intro fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to view {tutorName}'s contact details (phone & email). You can then arrange the class directly with the tutor.
+                    Pay a one-time intro fee of <span className="font-bold text-foreground">{currencySymbol}{introFee}</span> to view the tutor's contact details (phone & email). You can then arrange the class directly with the tutor.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1154,12 +1154,21 @@ export default function TutorProfile() {
                     <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
                   </div>
 
-                  {stripeKey && stripeKey.startsWith("pk_test") && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Before proceeding with payment, please review our{" "}
+                      <a href="/legal/service-fee-refund-policy" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80 font-medium">Service fee &amp; Refund Policy</a>{" "}
+                      and{" "}
+                      <a href="/legal/terms-condition" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80 font-medium">Terms &amp; Conditions</a>.
+                    </p>
+                  </div>
+
+                  {/* stripeKey && stripeKey.startsWith("pk_test") && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
                       <p className="text-xs font-medium text-amber-700">🧪 Stripe Test Mode — No real charges</p>
                       <p className="text-xs text-amber-600 mt-1">Use card: 4242 4242 4242 4242, any future date, any CVC</p>
                     </div>
-                  )}
+                  )}*/}
 
                   <div className="space-y-3">
                     <div>
