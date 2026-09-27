@@ -21,7 +21,8 @@ const ICONS: Record<string, any> = {
   careers: Briefcase,
   "about-us": Info,
 };
-
+// ━━━ Pages that are NOT part of Legal Center — hide the back button for these ━━━
+const HIDE_BACK_TO_LEGAL_CENTER = ["about-us", "careers", "legal-notice"];
 const LegalPage = () => {
   const { slug } = useParams();
   const [page, setPage] = useState<CmsPage | null>(null);
@@ -53,12 +54,14 @@ const LegalPage = () => {
       <Header />
       <main className="pt-24 lg:pt-32 pb-20">
         <div className="section-container max-w-4xl">
-          <Link
-            to="/legal-center"
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-6"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Legal Center
-          </Link>
+          {!HIDE_BACK_TO_LEGAL_CENTER.includes(slug || "") && (
+            <Link
+              to="/legal-center"
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-6"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to Legal Center
+            </Link>
+          )}
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-light mb-6">
               <Icon className="w-8 h-8 text-primary" />

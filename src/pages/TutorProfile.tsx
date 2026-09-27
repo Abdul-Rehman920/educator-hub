@@ -286,6 +286,11 @@ export default function TutorProfile() {
   const [cardCvc, setCardCvc] = useState("");
   const [cardName, setCardName] = useState("");
 
+  // ━━━ Policy acknowledgement states ━━━
+  const [refundPolicyClicked, setRefundPolicyClicked] = useState(false);
+  const [termsClicked, setTermsClicked] = useState(false);
+  const [policiesAgreed, setPoliciesAgreed] = useState(false);
+
   // Contact details popup state
   const [showContactModal, setShowContactModal] = useState(false);
 
@@ -469,6 +474,10 @@ export default function TutorProfile() {
       setPaymentError("Payment system is not available. Please try again later.");
       return;
     }
+    if (!policiesAgreed) {
+      setPaymentError("Please read and agree to the policies before proceeding.");
+      return;
+    }
 
     setPaymentError("");
     setPaymentProcessing(true);
@@ -544,6 +553,9 @@ export default function TutorProfile() {
         setCardExpiry("");
         setCardCvc("");
         setCardName("");
+        setRefundPolicyClicked(false);
+        setTermsClicked(false);
+        setPoliciesAgreed(false);
         setShowContactModal(true);
       }, 1500);
 
@@ -853,6 +865,8 @@ export default function TutorProfile() {
   const hasDispute = !!existingDispute;
   const isDisputeOpen = existingDispute?.status === 1;
 
+  const canProceedWithPayment = refundPolicyClicked && termsClicked;
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -1127,8 +1141,25 @@ export default function TutorProfile() {
 
       {/* ━━━ STRIPE PAYMENT MODAL ━━━ */}
       {!hideTutorActions && (
-        <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); } }}>
-          <DialogContent className="sm:max-w-md">
+        <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !paymentProcessing) { setShowPaymentModal(false); setPaymentError(""); setPaymentSuccess(false); setRefundPolicyClicked(false); setTermsClicked(false); setPoliciesAgreed(false); } }}>
+          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto payment-scroll">
+            <style>{`
+              .payment-scroll::-webkit-scrollbar {
+                width: 6px;
+              }
+              .payment-scroll::-webkit-scrollbar-button {
+                display: none;
+                height: 0;
+                width: 0;
+              }
+              .payment-scroll::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              .payment-scroll::-webkit-scrollbar-thumb {
+                background: rgba(0,0,0,0.2);
+                border-radius: 9999px;
+              }
+            `}</style>
             {paymentSuccess ? (
               <div className="text-center py-6">
                 <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
@@ -1154,13 +1185,52 @@ export default function TutorProfile() {
                     <p className="text-3xl font-bold text-primary">{currencySymbol}{introFee}</p>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                    <p className="text-xs text-muted-foreground">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground text-center mb-2">
                       Before proceeding with payment, please review our{" "}
-                      <a href="/legal/service-fee-refund-policy" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80 font-medium">Service fee &amp; Refund Policy</a>{" "}
+                      <a
+                        href="/legal/service-fee-refund-policy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setRefundPolicyClicked(true)}
+                        className="underline text-primary hover:text-primary/80 font-medium"
+                      >
+                        Service fee &amp; Refund Policy
+                      </a>{" "}
                       and{" "}
-                      <a href="/legal/terms-condition" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80 font-medium">Terms &amp; Conditions</a>.
+                      <a
+                        href="/legal/terms-condition"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setTermsClicked(true)}
+                        className="underline text-primary hover:text-primary/80 font-medium"
+                      >
+                        Terms &amp; Conditions
+                      </a>.
                     </p>
+
+                    <label
+                      className={`flex items-center gap-2 justify-center text-xs ${
+                        !canProceedWithPayment ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={policiesAgreed}
+                        disabled={!canProceedWithPayment}
+                        onChange={(e) => setPoliciesAgreed(e.target.checked)}
+                        className="accent-primary"
+                      />
+                      <span className={canProceedWithPayment ? "text-foreground font-medium" : "text-muted-foreground"}>
+                        I have read and agree to the policies
+                      </span>
+                    </label>
+
+                    {!canProceedWithPayment && (
+                      <p className="text-[10px] text-muted-foreground text-center mt-1">
+                        Please open both links above to enable this checkbox
+                      </p>
+                    )}
                   </div>
 
                   {/* stripeKey && stripeKey.startsWith("pk_test") && (
@@ -1193,8 +1263,8 @@ export default function TutorProfile() {
                   {paymentError && <p className="text-destructive text-sm font-medium">{paymentError}</p>}
                 </div>
                 <DialogFooter className="gap-2 sm:gap-0">
-                  <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); }} disabled={paymentProcessing}>Cancel</Button>
-                  <Button onClick={handlePayment} disabled={paymentProcessing} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button variant="outline" onClick={() => { setShowPaymentModal(false); setPaymentError(""); setRefundPolicyClicked(false); setTermsClicked(false); setPoliciesAgreed(false); }} disabled={paymentProcessing}>Cancel</Button>
+                  <Button onClick={handlePayment} disabled={paymentProcessing || !policiesAgreed} className="bg-primary text-primary-foreground hover:bg-primary/90">
                     {paymentProcessing ? (
                       <span className="flex items-center gap-2">
                         <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
