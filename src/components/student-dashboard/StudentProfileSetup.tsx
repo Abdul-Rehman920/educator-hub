@@ -11,6 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { allTimezones } from "@/data/timezones";
+import { formatPhoneWithCode } from "@/lib/phone";
 
 const MAX_SUBJECTS = 5;
 
@@ -686,7 +687,7 @@ export function StudentProfileSetup({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Phone Number</Label>
-                  <Input value={phone} disabled className="bg-muted opacity-60" />
+                  <Input value={formatPhoneWithCode(phone, countryData?.calling_code)} disabled className="bg-muted opacity-60" />
                 </div>
               </div>
 

@@ -36,6 +36,7 @@ import { educatorStandards, subjectsByStandard, languages } from "@/data/educato
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import api from "@/lib/api";
+import { formatPhoneWithCode } from "@/lib/phone";
 
 import { allTimezones } from "@/data/timezones";
 
@@ -136,6 +137,7 @@ export interface TeacherProfileData {
   country: string;
   countryId?: number | null;
   callingDigits?: string;
+  callingCode?: string;
   birthMonth: string;
   birthYear: string;
   profileImage: string | null;
@@ -173,6 +175,7 @@ interface ProfileSetupProps {
   initialCountry?: string;
   initialCountryId?: number | null;
   initialCallingDigits?: string;
+  initialCallingCode?: string;
   initialPhone?: string;
   existingProfile?: TeacherProfileData | null;
 }
@@ -186,6 +189,7 @@ export function ProfileSetup({
   initialCountry,
   initialCountryId,
   initialCallingDigits,
+  initialCallingCode,
   initialPhone,
   existingProfile,
 }: ProfileSetupProps) {
@@ -248,6 +252,7 @@ export function ProfileSetup({
   const [country] = useState(existingProfile?.country || initialCountry || "");
   const [countryId] = useState(existingProfile?.countryId || initialCountryId || null);
   const [callingDigits] = useState(existingProfile?.callingDigits || initialCallingDigits || "");
+  const [callingCode] = useState(existingProfile?.callingCode || initialCallingCode || "");
   // FIX: If existingProfile has a relative image path, build full URL so it displays correctly
   const buildImageUrl = (img: string | null | undefined): string | null => {
     if (!img) return null;
@@ -812,7 +817,7 @@ export function ProfileSetup({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Phone Number</Label>
-                  <Input value={phone} disabled className="bg-muted" />
+                  <Input value={formatPhoneWithCode(phone, callingCode)} disabled className="bg-muted" />
                 </div>
               </div>
 

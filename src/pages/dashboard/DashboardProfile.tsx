@@ -105,6 +105,7 @@ export default function DashboardProfile() {
           country: data.country?.name || "",
           countryId: data.country?.id || null,
           callingDigits: data.country?.calling_digits || "",
+          callingCode: data.country?.calling_code || "",
           birthMonth: data.profile?.date_of_birth?.slice(5, 7) || "",
           birthYear: data.profile?.date_of_birth?.slice(0, 4) || "",
           profileImage: data.profile?.profile_img || null,
@@ -181,6 +182,7 @@ export default function DashboardProfile() {
     country: apiData?.country?.name || navState.country || "",
     countryId: apiData?.country?.id || null,
     callingDigits: apiData?.country?.calling_digits || "",
+    callingCode: apiData?.country?.calling_code || "",
   };
 
   const showSetup = !profileComplete || isEditing;
@@ -197,6 +199,7 @@ export default function DashboardProfile() {
           initialCountry={prefill.country}
           initialCountryId={prefill.countryId}
           initialCallingDigits={prefill.callingDigits}
+          initialCallingCode={prefill.callingCode}
           initialPhone={prefill.phone}
           existingProfile={isEditing ? profileData : undefined}
         />

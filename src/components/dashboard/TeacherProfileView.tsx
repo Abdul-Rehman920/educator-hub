@@ -7,6 +7,7 @@ import {
   DollarSign, Clock, Briefcase, BookOpen, Mail, Phone, User, CalendarOff,
 } from "lucide-react";
 import type { TeacherProfileData } from "./ProfileSetup";
+import { formatPhoneWithCode } from "@/lib/phone";
 
 const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -107,7 +108,7 @@ export function TeacherProfileView({ data, onEdit }: TeacherProfileViewProps) {
             {data.phone && (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
                 <Phone className="w-3.5 h-3.5" />
-                {data.phone}
+                {formatPhoneWithCode(data.phone, data.callingCode)}
               </div>
             )}
           </div>

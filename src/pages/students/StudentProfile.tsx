@@ -49,6 +49,12 @@ type ScheduleItem = {
 };
 
 const WEEKDAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const formatPhoneWithCode = (phone?: string | null, callingCode?: string | null) => {
+  if (!phone) return "";
+  if (phone.trim().startsWith("+")) return phone;
+  const code = (callingCode || "").replace(/\D/g, "");
+  return code ? `+${code} ${phone}` : phone;
+};
 
 // Convert UTC time string to user's local timezone (12h format)
 function utcToLocal(utcTime: string, userTimezone: string): string {
@@ -267,7 +273,7 @@ export default function StudentProfile() {
             <div>
               <h2 className="text-xl font-semibold text-foreground">{fullName}</h2>
               <p className="text-sm text-muted-foreground">{user.email}</p>
-              <p className="text-sm text-muted-foreground">{user.phone}</p>
+              <p className="text-sm text-muted-foreground">{formatPhoneWithCode(user.phone, user.country?.calling_code)}</p>
             </div>
           </CardContent>
         </Card>
